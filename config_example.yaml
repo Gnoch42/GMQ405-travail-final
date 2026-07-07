@@ -1,0 +1,15 @@
+# Utiliser ce document pour construire un fichier config.yaml
+# config.yaml sera untilisé par le code comme paramètres d'entrée
+
+extraction:
+  TBE:
+    inpath: "C:/Users/TBE_2014_2025.gdb"
+    outpath: "data/tbe_data.gpkg"
+    force_extraction: FALSE
+  IEQM:
+    inpath: 
+    outpath: "data/ieqm_data.gpkg"
+    force_extraction: FALSE
+  SDA:
+    inpath: "C:/Users/SDA.gpkg"
+    regions: ['Bas-Saint-Laurent', 'Gaspésie–Îles-de-la-Madeleine']
