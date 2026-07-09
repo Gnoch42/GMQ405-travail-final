@@ -6,10 +6,17 @@ extraction:
     inpath: "C:/Users/TBE_2014_2025.gdb"
     outpath: "data/tbe_data.gpkg"
     force_extraction: FALSE
+    
   IEQM:
     inpath: 
     outpath: "data/ieqm_data.gpkg"
     force_extraction: FALSE
+    
   SDA:
     inpath: "C:/Users/SDA.gpkg"
     regions: ['Bas-Saint-Laurent', 'Gaspésie–Îles-de-la-Madeleine']
+
+hex_grid:
+  cellsize: 10000       # Taille de cellule en mètres (ex: 10000 = hexagones de 10 km)
+  outpath: "data/hex_grid.gpkg"
+  force_creation: FALSE
