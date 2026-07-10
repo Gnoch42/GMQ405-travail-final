@@ -14,7 +14,9 @@ extraction:
     
   SDA:
     inpath: "C:/Users/SDA.gpkg"
-    regions: ['Bas-Saint-Laurent', 'Gaspésie–Îles-de-la-Madeleine']
+    layer: 'mrc_s'
+    field: 'MRS_NM_MRC'
+    regions: ['La Matanie', 'La Matapédia']
 
 hex_grid:
   cellsize: 10000       # Taille de cellule en mètres (ex: 10000 = hexagones de 10 km)

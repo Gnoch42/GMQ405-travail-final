@@ -8,8 +8,8 @@ if(!file.exists(cfg$extraction$TBE$outpath) | cfg$extraction$TBE$force_extractio
   source("src/data_extraction.R")
   extract.tbe.data(cfg)
 }
-
-if(!file.exists(cfg$extraction$IEQM$outpath) | cfg$extraction$IEQM$force_extraction){
-  source("src/data_extraction.R")
-  extract.ieqm.data(cfg)
-}
+# Ambition abandonnée :( Trop lourd
+# if(!file.exists(cfg$extraction$IEQM$outpath) | cfg$extraction$IEQM$force_extraction){
+#   source("src/data_extraction.R")
+#   extract.ieqm.data(cfg)
+# }

@@ -2,24 +2,24 @@ library(sf)
 
 extract.tbe.data <- function(cfg) {
   tbe <- st_read(cfg$extraction$TBE$inpath)
-  reg.adm <- st_read(cfg$extraction$SDA$inpath, layer = 'regio_s')
+  sda <- st_read(cfg$extraction$SDA$inpath, layer = cfg$extraction$SDA$layer)
   
-  region.of.interest <- subset(reg.adm, RES_NM_REG %in% cfg$extraction$SDA$regions) |>
+  region.of.interest <- subset(sda, st_drop_geometry(sda)[,cfg$extraction$SDA$field] %in% cfg$extraction$SDA$regions) |>
     st_union()
   if (st_crs(region.of.interest) != st_crs(tbe)) {
     region.of.interest <- st_transform(region.of.interest, st_crs(tbe))
   }
   tbe.subset <- subset(tbe, st_intersects(tbe, region.of.interest, sparse = FALSE))
   
-  st_write(tbe.subset, cfg$extraction$TBE$outpath, append = FALSE)
+  st_write(tbe.subset, cfg$extraction$TBE$outpath, append = FALSE) 
 }
 
 
 extract.ieqm.data <- function(cfg) {
   ieqm.list <- list.files(cfg$extraction$IEQM$inpath, full.names = TRUE)
-  reg.adm <- st_read(cfg$extraction$SDA$inpath, layer = 'regio_s')
+  sda <- st_read(cfg$extraction$SDA$inpath, layer = cfg$extraction$SDA$layer)
   
-  region.of.interest <- subset(reg.adm, RES_NM_REG %in% cfg$extraction$SDA$regions) |>
+  region.of.interest <- subset(sda, st_drop_geometry(sda)[,cfg$extraction$SDA$field] %in% cfg$extraction$SDA$regions) |>
     st_union()
   output.data <- NULL
   for(file in ieqm.list){
