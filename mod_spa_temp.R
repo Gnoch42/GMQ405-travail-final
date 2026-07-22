@@ -10,12 +10,11 @@ library("yaml")
 
 cfg <- read_yaml("config.yaml")
 
+source("src/data_extraction.R")
+source("hex_grid.R")
+
 
 # Test de modélisation de l'évolution spatiale
-if(!file.exists(cfg$extraction$TBE$outpath) | cfg$extraction$TBE$force_extraction){
-  source("src/data_extraction.R")
-  extract.tbe.data(cfg)
-}
 
 # Test de Markov
 
