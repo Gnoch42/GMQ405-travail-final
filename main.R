@@ -1,6 +1,6 @@
 library(yaml)
 
-cfg <- read_yaml("config.yaml")
+cfg <- read_yaml("ignore/config.yaml")
 
 
 # Extraction de la donnée pour les régions d'intérêt. Traitement lourd fait une seule fois
