@@ -19,6 +19,50 @@ library(sf)
 library(terra)
 
 
+#' Charger la ZONE D'ÉTUDE depuis un découpage administratif (MRC / municipalité)
+#'
+#' La zone d'étude sert de gabarit à toute la suite : elle délimite la grille
+#' hexagonale ET permet de découper les données lourdes (on ne traite que ce qui
+#' tombe dans la zone). Choisir une municipalité plutôt qu'une MRC réduit donc
+#' fortement les temps de calcul.
+#'
+#' Le filtrage se fait DIRECTEMENT à la lecture, via une requête SQL, pour ne PAS
+#' charger tout le fichier administratif en mémoire (le SDA du Québec est
+#' volumineux). Seules les entités demandées sont lues.
+#'
+#' @param zone_cfg   Liste issue du YAML (section `study_zone`) :
+#'   - source  : chemin du fichier de découpage (ex. "data/SDA.gpkg").
+#'   - layer   : couche = niveau administratif. Ex. "mrc_s" (MRC) ou
+#'               "munic_s" (municipalités).
+#'   - field   : colonne contenant le nom. Ex. "MRS_NM_MRC" (MRC) ou
+#'               "MUS_NM_MUN" (municipalités).
+#'   - regions : vecteur des noms à retenir (une ou plusieurs entités).
+#' @param target_crs CRS projeté cible ; la zone est reprojetée dedans (mètres).
+#'
+#' @return Un objet sf d'UNE seule géométrie (union des entités retenues), déjà
+#'   dans `target_crs`. Renvoie NULL si `zone_cfg` est absent (l'appelant se
+#'   rabat alors sur une autre définition de zone, ex. l'emprise de la cible).
+load.study.zone <- function(zone_cfg, target_crs = 32198) {
+  if (is.null(zone_cfg) || is.null(zone_cfg$source)) return(NULL)
+
+  # Construction de la requête SQL : on double les apostrophes des noms
+  # (ex. "L'Islet") pour éviter toute erreur de syntaxe.
+  vals <- paste0("'", gsub("'", "''", zone_cfg$regions), "'", collapse = ", ")
+  requete <- sprintf("SELECT * FROM %s WHERE %s IN (%s)",
+                     zone_cfg$layer, zone_cfg$field, vals)
+
+  z <- sf::st_read(zone_cfg$source, query = requete, quiet = TRUE)
+  if (nrow(z) == 0) {
+    stop("Zone d'étude vide : vérifier study_zone (layer / field / regions) dans la config.")
+  }
+
+  z <- sf::st_zm(z)                      # retire la dimension Z (SDA en 3D)
+  z <- sf::st_union(z)                   # fusionne les entités en une seule zone
+  z <- sf::st_transform(z, target_crs)   # CRS projeté commun (mètres)
+  sf::st_sf(geometry = z)
+}
+
+
 #' Charger une source de covariable décrite dans la config
 #'
 #' @param cov Liste décrivant UNE covariable, telle qu'écrite dans le YAML :

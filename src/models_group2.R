@@ -68,6 +68,15 @@ build.spatial.weights <- function(hex) {
 fit.group2 <- function(data, hex, cov_names,
                        models = c("ols","slx","sar","sem","durbin","durbin_error","gam")) {
 
+  # Garde-fou : les modèles de régression exigent au moins une covariable.
+  # Sans covariable déclarée dans le YAML, on ne peut rien estimer -> on renvoie
+  # une ligne d'information plutôt que de planter le pipeline.
+  if (length(cov_names) == 0) {
+    message("  [Groupe 2] aucune covariable déclarée -> groupe ignoré ",
+            "(ajoutez des covariables dans config `covariates:`).")
+    return(standardize.group2.result("(aucune covariable)", NULL, statut = "aucune_covariable"))
+  }
+
   # --- 1. Préparation : cible ordinale -> numérique (rang) ---
   # Nécessaire pour les modèles linéaires spatiaux. On garde l'ordre Aucun < ...
   data$y <- as.integer(data$target) - 1L   # 0 = Aucun, 1 = Léger, ...
@@ -174,7 +183,9 @@ standardize.group2.result <- function(name, model,
                                        r2 = NA_real_, moran_p = NA_real_,
                                        rho = NA_real_, lambda = NA_real_,
                                        loglik = NA_real_, statut = "ok") {
-  if (is.null(model)) statut <- "échec_ajustement"
+  # Un modèle NULL signale un échec d'ajustement, sauf si l'appelant a déjà
+  # fourni un statut plus précis (ex. "aucune_covariable").
+  if (is.null(model) && statut == "ok") statut <- "échec_ajustement"
   data.frame(
     modele    = name,
     statut    = statut,

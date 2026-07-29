@@ -28,6 +28,18 @@ hex_grid:
 project:
   target_crs: 32198     # CRS projeté cible (mètres). 32198 = NAD83/Québec Lambert.
 
+# --- Zone d'étude : découpage administratif servant de base à la grille ---
+# Délimite la grille hexagonale ET découpe les données lourdes (plus la zone est
+# petite, plus les traitements sont légers). Choisir le niveau via layer + field :
+#   MRC          -> layer: "mrc_s",   field: "MRS_NM_MRC"
+#   Municipalité -> layer: "munic_s", field: "MUS_NM_MUN"
+# Si cette section est retirée, la zone = emprise (bounding box) de la cible.
+study_zone:
+  source: "data/SDA.gpkg"
+  layer: "mrc_s"
+  field: "MRS_NM_MRC"
+  regions: ["La Matanie", "La Matapédia"]
+
 # --- Variable cible (intensité TBE) ---
 target:
   source: "data/tbe_data.gpkg"

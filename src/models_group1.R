@@ -126,6 +126,15 @@ fit.markov <- function(splits, n_states) {
   train <- splits$train
   states <- 0:(n_states - 1)
 
+  # Garde-fous : sans données d'entraînement ou de test, on ne peut ni estimer
+  # ni évaluer -> on renvoie un résultat vide annoté (le pipeline continue).
+  if (nrow(train) == 0)
+    return(list(result = standardize.group1.result("Markov spatial", NULL, NULL,
+                                                    n_states, statut = "train_vide")))
+  if (nrow(splits$test) == 0)
+    return(list(result = standardize.group1.result("Markov spatial", NULL, NULL,
+                                                    n_states, statut = "test_vide")))
+
   # Matrice de comptage des transitions observées.
   trans <- table(factor(train$state_t,  levels = states),
                  factor(train$state_t1, levels = states))
@@ -159,11 +168,19 @@ fit.rf <- function(splits, cov_names, n_states, engine = "ranger") {
 
   predictors <- c("state_t", "neigh_pressure", cov_names)
   train <- splits$train; test <- splits$test
-  train$state_t1 <- factor(train$state_t1, levels = 0:(n_states - 1))
+  train_ok <- train[complete.cases(train[, predictors]), ]
 
+  # Garde-fous : entraînement/test insuffisants -> résultat vide annoté.
+  if (nrow(train_ok) < 10)
+    return(list(result = standardize.group1.result("Random Forest", NULL, NULL,
+                                                    n_states, statut = "train_insuffisant")))
+  if (nrow(test) == 0)
+    return(list(result = standardize.group1.result("Random Forest", NULL, NULL,
+                                                    n_states, statut = "test_vide")))
+
+  train_ok$state_t1 <- factor(train_ok$state_t1, levels = 0:(n_states - 1))
   fml <- as.formula(paste("state_t1 ~", paste(predictors, collapse = " + ")))
-  m <- ranger::ranger(fml, data = train[complete.cases(train[, predictors]), ],
-                      num.trees = 300, probability = FALSE)
+  m <- ranger::ranger(fml, data = train_ok, num.trees = 300, probability = FALSE)
   pred <- as.integer(as.character(predict(m, test)$predictions))
 
   res <- standardize.group1.result("Random Forest", test$state_t1, pred, n_states)

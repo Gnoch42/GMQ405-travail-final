@@ -120,6 +120,39 @@ target:
 > Les libellés d'intensité mal accentués dans la source (« Leger », « Modere »)
 > sont automatiquement harmonisés vers les `ordinal_levels`.
 
+#### Zone d'étude : choisir une ou plusieurs MRC / municipalités
+
+La **zone d'étude** est définie à partir d'un découpage administratif (fichier
+SDA). Elle joue deux rôles : elle **délimite la grille hexagonale** et elle
+**découpe les données lourdes** — plus la zone est petite, plus les traitements
+sont rapides (à titre indicatif, la municipalité de Matane couvre ~230 km²
+contre ~10 800 km² pour les deux MRC réunies, soit près de 50× moins de surface
+à traiter).
+
+```yaml
+study_zone:
+  source: "data/SDA.gpkg"
+  layer: "mrc_s"                 # niveau administratif (voir tableau ci-dessous)
+  field: "MRS_NM_MRC"            # colonne contenant le nom
+  regions: ["La Matanie", "La Matapédia"]   # une ou plusieurs entités
+```
+
+Pour changer de niveau, il suffit d'ajuster `layer` **et** `field` :
+
+| Niveau | `layer` | `field` | Exemple de `regions` |
+|---|---|---|---|
+| MRC | `mrc_s` | `MRS_NM_MRC` | `["La Matanie"]` |
+| Municipalité | `munic_s` | `MUS_NM_MUN` | `["Matane", "Sainte-Félicité"]` |
+
+Le filtrage se fait **directement à la lecture** (requête SQL) : le gros fichier
+SDA n'est jamais entièrement chargé en mémoire. La cible TBE est ensuite
+automatiquement découpée à cette zone. Si la section `study_zone` est retirée,
+la zone se rabat sur l'emprise rectangulaire (bounding box) de la cible.
+
+> Astuce : la zone d'étude peut être **plus petite** que la zone extraite lors du
+> prétraitement (`extraction` dans le YAML). On peut ainsi extraire une fois pour
+> deux MRC, puis analyser tour à tour chaque municipalité sans réextraire.
+
 ### 4.2 Ajouter des covariables réelles (sans toucher au code)
 
 C'est **la seule étape** pour intégrer une nouvelle covariable : ajouter une

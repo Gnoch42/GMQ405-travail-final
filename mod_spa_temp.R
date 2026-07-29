@@ -63,15 +63,29 @@ load.project.data <- function(cfg) {
 
   # --- Mode RÉEL : lecture depuis les chemins du YAML ---
   message(">> Mode DONNÉES RÉELLES (chemins lus depuis config.yaml)")
+  target_crs <- cfg$project$target_crs %||% 32198
+
   target <- st_read(cfg$target$source, quiet = TRUE)
   # Normalisation des libellés d'intensité (accents/casse incohérents dans la
   # source : "Leger"/"Léger", "Modere"/"Modéré"). On harmonise pour l'ordinal.
   vf <- cfg$target$value_field
   target[[vf]] <- normalize.intensity(target[[vf]], cfg$target$ordinal_levels)
+  target <- st_transform(target, target_crs)   # CRS projeté commun (mètres)
 
-  # La zone d'étude par défaut = emprise de la cible (les covariables seront
-  # découpées dessus lors de l'agrégation).
-  zone <- st_as_sfc(st_bbox(target)) |> st_sf(geometry = _)
+  # ZONE D'ÉTUDE : de préférence un découpage administratif (MRC/municipalité)
+  # défini dans config `study_zone`. Cela délimite la grille ET allège les
+  # traitements (on ne garde que les données de la zone). À défaut, on se rabat
+  # sur l'emprise (bounding box) de la cible.
+  zone <- load.study.zone(cfg$study_zone, target_crs)
+  if (is.null(zone)) {
+    message("  (study_zone non défini -> zone = emprise de la cible)")
+    zone <- st_as_sfc(st_bbox(target)) |> st_sf(geometry = _)
+  } else {
+    # Découpage de la cible à la zone : on ne conserve que les entités TBE qui
+    # intersectent la zone d'étude, ce qui réduit fortement le volume à traiter.
+    target <- target[zone, ]
+    message("  Cible découpée à la zone d'étude : ", nrow(target), " entités TBE conservées")
+  }
 
   list(zone = zone, target = target, covariates = cfg$covariates,
        target_cfg = cfg$target)
@@ -187,3 +201,4 @@ main <- function(config_path = "config.yaml") {
 if (sys.nframe() == 0) {
   main("config.yaml")
 }
+
