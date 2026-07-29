@@ -6,3 +6,11 @@
 
 config.yaml
 data/*
+
+# Fichiers secrets macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Dossier ignore (tout le contenu)
+ignore/

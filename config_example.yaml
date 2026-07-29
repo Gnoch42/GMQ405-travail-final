@@ -20,5 +20,61 @@ extraction:
 
 hex_grid:
   cellsize: 10000       # Taille de cellule en mètres (ex: 10000 = hexagones de 10 km)
+  min_coverage: 0.25    # Couverture minimale d'un hexagone pour recevoir une valeur (0-1)
   outpath: "data/hex_grid.gpkg"
   force_creation: FALSE
+
+# --- Paramètres généraux du projet ---
+project:
+  target_crs: 32198     # CRS projeté cible (mètres). 32198 = NAD83/Québec Lambert.
+
+# --- Variable cible (intensité TBE) ---
+target:
+  source: "data/tbe_data.gpkg"
+  year_field: "ANNEE"          # colonne année
+  value_field: "Niveau"        # colonne intensité (ordinale)
+  value_type: "ordinal"
+  ordinal_levels: ["Léger", "Modéré", "Grave"]   # ordre croissant d'intensité
+  agg_method: "mode"
+
+# --- Covariables : AJOUTER ICI les vraies covariables (aucun code à toucher) ---
+# Chaque entrée : name, type (raster|vector), value_type (continuous|categorical|
+# ordinal), path, field (vecteur) ou band (raster), agg_method (median|mode).
+covariates: {}
+  # Exemple raster continu :
+  # temperature:
+  #   type: "raster"
+  #   value_type: "continuous"
+  #   path: "data/covariates/temp_hiver.tif"
+  #   band: 1
+  #   agg_method: "median"
+  # Exemple polygone catégoriel :
+  # essence:
+  #   type: "vector"
+  #   value_type: "categorical"
+  #   path: "data/covariates/essences.gpkg"
+  #   field: "ESSENCE"
+  #   agg_method: "mode"
+
+# --- Données simulées (démo). Mettre use_simulated: FALSE pour les vraies données ---
+simulate:
+  use_simulated: TRUE
+  seed: 42
+  n_years: 12
+  extent_km: 200
+
+# --- Modèles ---
+models:
+  group1:                        # prédiction t+1
+    run: ["markov", "rf", "convlstm"]
+    temporal_split:              # bornes INCLUSIVES sur l'année de départ (t)
+      train_years: [2014, 2020]
+      valid_years: [2021, 2022]
+      test_years:  [2023, 2024]
+  group2:                        # analyse à un instant t
+    year_t: 2022
+    run: ["ols", "slx", "sar", "sem", "durbin", "durbin_error", "gam"]
+
+# --- Sorties ---
+output:
+  dir: "data/output/models"
