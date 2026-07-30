@@ -36,9 +36,9 @@ project:
 # Si cette section est retirée, la zone = emprise (bounding box) de la cible.
 study_zone:
   source: "data/SDA.gpkg"
-  layer: "mrc_s"
-  field: "MRS_NM_MRC"
-  regions: ["La Matanie", "La Matapédia"]
+  layer: "munic_s"
+  field: "MUS_NM_MUN"
+  regions: ["Matane"]
 
 # --- Variable cible (intensité TBE) ---
 target:
@@ -67,6 +67,79 @@ covariates: {}
   #   path: "data/covariates/essences.gpkg"
   #   field: "ESSENCE"
   #   agg_method: "mode"
+
+# =============================================================================
+# COVARIABLES RÉELLES (téléchargement ciblé + construction)
+# =============================================================================
+# Deux étapes distinctes, lancées séparément du pipeline de modélisation :
+#   1. Rscript src/covariate_download.R  -> télécharge les tuiles/fichiers qui
+#      intersectent study_zone (idempotent : ignore ce qui est déjà présent).
+#   2. Rscript src/covariate_build.R     -> calcule les covariables et écrit un
+#      PANEL hex×année en cache, consommé ensuite par l'outil d'évaluation ET
+#      par mod_spa_temp (aucun recalcul).
+# Ajouter/retirer une covariable = éditer ce YAML uniquement (aucun code).
+
+# --- Sources à télécharger ---
+covariate_sources:
+  ecoforest:                     # carte écoforestière MFFP (index de feuillets)
+    index: "data/Indexes_téléchargement/Indexe_ecoforestier250k.geojson"
+    tile_field: "Feuillet250K"   # identifiant de feuillet
+    url_field: "Lien_GPKG"       # URL du ZIP contenant la GPKG du feuillet
+    download_dir: "data/downloads/ecoforest"   # ZIP + GPKG bruts (volumineux)
+    clip_dir: "data/covariates/ecoforest"      # GPKG découpée à la zone (légère)
+    stand_layer: "pee_ori"       # couche des peuplements
+    essence_table: "essence_ori" # table des % d'essences (clé geocode)
+    keep_raw: false              # FALSE = supprimer ZIP+GPKG bruts après découpage
+
+  climate:                       # grilles climatiques RSCQ (NetCDF quotidien)
+    links_csv: "data/Indexes_téléchargement/RSCQ/Liens_Telechargements_Grilles_Climat_Quot.csv"
+    param_field: "Parametre"
+    year_field: "Annee"
+    file_field: "Nom_Fichier"
+    url_field: "Lien_Telechargement"
+    download_dir: "data/downloads/rscq"
+
+# --- Définition des 5 covariables + cache du panel ---
+covariates_build:
+  cache: "data/covariates/panel_hex.rds"        # panel hex×année (format R)
+  cache_gpkg: "data/covariates/panel_hex.gpkg"  # version géographique (SIG)
+  force: FALSE                                   # TRUE = tout recalculer
+  items:
+    prop_hote:                   # proportion sapin baumier + épinettes (essence hôte)
+      builder: "ecoforest_host_prop"
+      value_type: "continuous"
+      temporal: false            # statique (instantané écoforestier)
+      host_essences: ["SB", "EB", "EN", "ER"]  # sapin + épinettes (ajouter EO/EU ?)
+      forest_cover: ["R", "M", "F"]            # type_couv considéré "forestier"
+
+    age_peuplement:              # âge du peuplement (étage dominant)
+      builder: "ecoforest_age"
+      value_type: "continuous"
+      temporal: false
+      age_jeune_inequienne: 30   # âge attribué aux classes JI (jeune inéquienne)
+      age_vieux_inequienne: 90   # âge attribué aux classes VI (vieux inéquienne)
+
+    tmin_hiver:                  # température hivernale minimale, par année
+      builder: "winter_tmin"
+      value_type: "continuous"
+      temporal: true             # une valeur par année
+      parameter: "TMIN"
+      winter_prev_months: [12]   # décembre de l'année t-1
+      winter_curr_months: [1, 2] # janvier-février de l'année t
+
+    hist_infest:                 # historique d'infestation cumulé (groupe 1)
+      builder: "tbe_history"
+      value_type: "continuous"
+      temporal: true
+      window: 5                  # somme des sévérités sur t-5..t-1
+      groups: ["group1"]         # utilisée en prédiction uniquement
+
+    dist_foyer:                  # distance au foyer actif le plus proche (groupe 1)
+      builder: "tbe_distance"
+      value_type: "continuous"
+      temporal: true
+      active_levels: ["Modéré", "Grave"]  # "actif" = modéré ou grave à t-1
+      groups: ["group1"]
 
 # --- Données simulées (démo). Mettre use_simulated: FALSE pour les vraies données ---
 simulate:

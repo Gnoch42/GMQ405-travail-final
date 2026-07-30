@@ -36,10 +36,12 @@ config.yaml               Tous les paramètres (le SEUL fichier à éditer au qu
 mod_spa_temp.R            Programme principal : orchestre les 2 groupes de modèles
 src/
 ├── hex_grid.R            Grille hexagonale + agrégation spatiale générique
-├── features.R            Assemblage cible + covariables sur la grille
+├── features.R            Assemblage cible + covariables + chargement du cache
 ├── models_group1.R       Modèles de prédiction t+1
 ├── models_group2.R       Modèles d'analyse à un instant t
 ├── covariate_evaluation.R  OUTIL AUTONOME de sélection des covariables
+├── covariate_download.R  Téléchargement ciblé des sources (écoforestier, climat)
+├── covariate_build.R     Calcul des 5 covariables -> panel hex×année en cache
 ├── simulate_data.R       Générateur de données factices (démo)
 └── data_extraction.R     Extraction des données réelles (existant)
 ```
@@ -226,6 +228,54 @@ models:
 > serait artificiellement gonflée. On entraîne donc sur les premières années et
 > on teste sur les suivantes.
 
+### 4.5 Covariables réelles : télécharger et calculer (workflow complet)
+
+En plus du mécanisme générique de la section 4.2, le projet inclut un **workflow
+dédié** pour cinq covariables issues de sources externes lourdes (carte
+écoforestière MFFP, climat RSCQ) ou dérivées des données TBE. Il repose sur deux
+scripts lancés **une fois** (puis à chaque changement de zone/covariables) :
+
+```bash
+Rscript src/covariate_download.R   # 1) télécharge ce qui touche la zone d'étude
+Rscript src/covariate_build.R      # 2) calcule les covariables -> cache
+```
+
+- **Étape 1 (téléchargement ciblé)** : ne télécharge que les feuillets
+  écoforestiers et les fichiers climatiques qui intersectent `study_zone`, et
+  seulement s'ils sont absents (idempotent). Les données écoforestières brutes
+  (~1 Go zippé/feuillet) sont découpées à la zone puis **supprimées** pour
+  économiser l'espace (paramètre `keep_raw`). ⚠️ Plus la zone est grande, plus le
+  téléchargement est lourd : préférez une municipalité à une MRC si possible.
+- **Étape 2 (calcul + cache)** : produit un **panel hex×année** unique
+  (`data/covariates/panel_hex.rds` + `.gpkg`) contenant, pour chaque hexagone et
+  chaque année, la cible TBE et les cinq covariables. Ce cache est ensuite lu
+  **sans recalcul** par l'outil d'évaluation (`evaluate.from.cache()`) ET par
+  `mod_spa_temp` — le calcul lourd n'est donc fait qu'une seule fois.
+
+Les cinq covariables (définies dans `covariates_build:` du YAML) :
+
+| Covariable | Type | Définition | Groupes |
+|---|---|---|---|
+| `prop_hote` | statique | proportion surfacique sapin+épinettes sur la forêt de l'hexagone (pondérée par la surface terrière `st_ess_pc`) | 1 et 2 |
+| `age_peuplement` | statique | âge médian du peuplement (âge de l'étage dominant, classes inéquiennes JI→30 / VI→90 ans) | 1 et 2 |
+| `tmin_hiver` | annuelle | minimum du TMIN quotidien sur déc.(t‑1)+janv.‑févr.(t) | 1 et 2 |
+| `hist_infest` | annuelle | somme des sévérités TBE sur t‑5 à t‑1 | 1 seulement |
+| `dist_foyer` | annuelle | distance au foyer actif (modéré/grave) le plus proche à t‑1 | 1 seulement |
+
+« statique » = une valeur par hexagone ; « annuelle » = une valeur par hexagone
+et par année. Les covariables `hist_infest` et `dist_foyer`, dérivées du passé de
+la cible, ne servent qu'à la **prédiction** (groupe 1) — les utiliser pour
+l'analyse à un instant t (groupe 2) créerait une circularité.
+
+**Paramètres ajustables** (dans `covariates_build$items`, sans toucher au code) :
+la liste des essences hôtes (`host_essences`, défaut `SB,EB,EN,ER` — on peut y
+ajouter d'autres épinettes), les âges attribués aux classes inéquiennes, la
+fenêtre d'historique (`window`), les mois d'hiver, et les classes « actives » de
+la distance au foyer.
+
+> **Changer de zone d'étude** invalide le cache : relancez les deux scripts (le
+> pipeline vous prévient si le cache ne correspond plus à la config).
+
 ---
 
 ## 5. Choisir ses covariables : l'outil d'évaluation
@@ -237,9 +287,12 @@ juger lesquelles valent la peine. Il est **indépendant** du pipeline principal.
 Rscript src/covariate_evaluation.R
 ```
 
-Pour l'utiliser sur vos propres covariables, appelez `evaluate.covariates()`
-depuis un script R en lui passant votre grille, votre cible et votre liste de
-covariables (voir la fonction `demo.covariate.evaluation()` comme modèle).
+Sur les **vraies données**, une fois le cache construit (section 4.5), lancez
+simplement `Rscript src/covariate_evaluation.R` : il détecte le cache et évalue
+les cinq covariables réelles (via `evaluate.from.cache()`), sur l'année la plus
+infestée par défaut. Sans cache, il retombe sur la démo simulée. Pour un usage
+programmatique, `evaluate.covariates()` accepte aussi une grille et des
+covariables fournies à la main (voir `demo.covariate.evaluation()`).
 
 **Ce qu'il produit** (`data/output/covariate_eval/`) :
 

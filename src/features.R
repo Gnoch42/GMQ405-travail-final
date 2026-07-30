@@ -63,6 +63,45 @@ load.study.zone <- function(zone_cfg, target_crs = 32198) {
 }
 
 
+#' Charger le PANEL de covariables en cache (produit par covariate_build.R)
+#'
+#' Le panel (hex_id × année × cible × covariables) est calculé une seule fois par
+#' src/covariate_build.R, puis lu ici SANS recalcul par l'outil d'évaluation et
+#' par mod_spa_temp. Un contrôle de cohérence prévient si le cache ne correspond
+#' plus à la config (zone ou résolution changées -> relancer le build).
+#'
+#' @param cfg Config complète (lue depuis le YAML).
+#' @return La liste en cache ($data, $hex, $types, $meta), ou NULL si absente.
+load.covariate.panel <- function(cfg) {
+  path <- cfg$covariates_build$cache
+  if (is.null(path) || !file.exists(path)) return(NULL)
+  cache <- readRDS(path)
+
+  # Cohérence zone / résolution.
+  m <- cache$meta
+  if (!identical(sort(unlist(m$zone_regions)), sort(unlist(cfg$study_zone$regions))) ||
+      !isTRUE(m$cellsize == cfg$hex_grid$cellsize)) {
+    warning("Le cache de covariables ne correspond plus à la config (zone/résolution). ",
+            "Relancez src/covariate_build.R.")
+  }
+  cache
+}
+
+
+#' Harmoniser les libellés d'intensité TBE (gère accents et casse variables)
+#'
+#' La source TBE contient des variantes ("Leger"/"Léger", "Modere"/"Modéré").
+#' On les ramène aux libellés canoniques fournis (ordinal_levels).
+normalize.intensity <- function(x, levels) {
+  x <- as.character(x)
+  key   <- gsub("é", "e", tolower(trimws(x)))
+  canon <- setNames(levels, gsub("é", "e", tolower(levels)))
+  out <- canon[key]
+  out[is.na(out)] <- x[is.na(out)]   # inchangé si non reconnu
+  unname(out)
+}
+
+
 #' Charger une source de covariable décrite dans la config
 #'
 #' @param cov Liste décrivant UNE covariable, telle qu'écrite dans le YAML :

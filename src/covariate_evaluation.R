@@ -44,6 +44,7 @@
 
 library(sf)
 library(ggplot2)
+library(yaml)
 
 # On réutilise la logique d'agrégation spatiale (tâche 2) et l'assemblage.
 source("src/hex_grid.R")
@@ -134,10 +135,28 @@ evaluate.covariates <- function(hex, target_sf, target_cfg, covariates,
 
   agg <- aggregate.covariates(hex, covariates, min_coverage)
   hex_tab <- st_drop_geometry(agg$hex)
-  types <- agg$types
-  cov_names <- names(covariates)
 
-  # --- 2. Association de chaque covariable avec la cible ---
+  # --- 2-4. Associations, colinéarité, sorties (cœur partagé) ---
+  invisible(rank.report.covariates(hex_tab, target_fac, agg$types,
+                                   names(covariates), outdir))
+}
+
+
+#' Cœur d'évaluation : associations + colinéarité + sorties
+#'
+#' Séparé de l'agrégation pour être réutilisé aussi bien à partir d'une grille
+#' fraîchement agrégée que du PANEL EN CACHE (evaluate.from.cache).
+#'
+#' @param hex_tab    data.frame : une ligne par hexagone, une colonne par covariable.
+#' @param target_fac Cible ordinale (facteur ordonné, "Aucun" inclus).
+#' @param types      Vecteur nommé covariable -> value_type.
+#' @param cov_names  Covariables à évaluer.
+#' @param outdir     Dossier de sortie.
+rank.report.covariates <- function(hex_tab, target_fac, types, cov_names, outdir) {
+  dir.create(outdir, recursive = TRUE, showWarnings = FALSE)
+  target_rank <- as.integer(target_fac)   # 1=Aucun, 2=Léger, ...
+
+  # Association de chaque covariable avec la cible.
   rank_rows <- lapply(cov_names, function(nm) {
     a <- associate.covariate(hex_tab[[nm]], target_rank, target_fac, types[nm])
     data.frame(covariable = nm, type = types[nm], test = a$test,
@@ -146,22 +165,19 @@ evaluate.covariates <- function(hex, target_sf, target_cfg, covariates,
                stringsAsFactors = FALSE)
   })
   ranking <- do.call(rbind, rank_rows)
-  # Classement par force d'association décroissante (la plus prometteuse en tête).
-  ranking <- ranking[order(-ranking$force), ]
+  ranking <- ranking[order(-ranking$force), ]     # plus prometteuse en tête
   ranking$interpretation <- interpret.strength(ranking$force)
 
-  # --- 3. Colinéarité entre covariables continues ---
+  # Colinéarité entre covariables continues.
   cont_names <- cov_names[types[cov_names] %in% c("continuous", "ordinal")]
-  collinearity <- NULL
-  vif_df <- NULL
+  collinearity <- NULL; vif_df <- NULL
   if (length(cont_names) >= 2) {
-    cont_mat <- as.matrix(hex_tab[, cont_names, drop = FALSE])
-    cont_mat <- apply(cont_mat, 2, as.numeric)
+    cont_mat <- apply(as.matrix(hex_tab[, cont_names, drop = FALSE]), 2, as.numeric)
     collinearity <- cor(cont_mat, use = "pairwise.complete.obs", method = "spearman")
     vif_df <- compute.vif(as.data.frame(cont_mat))
   }
 
-  # --- 4. Sorties : tableau CSV + graphiques PNG ---
+  # Sorties : tableau CSV + graphiques PNG.
   write.csv(ranking, file.path(outdir, "classement_covariables.csv"), row.names = FALSE)
   plot.ranking(ranking, outdir)
   if (!is.null(collinearity)) plot.collinearity(collinearity, outdir)
@@ -170,8 +186,36 @@ evaluate.covariates <- function(hex, target_sf, target_cfg, covariates,
   print(ranking, row.names = FALSE)
   if (!is.null(vif_df)) { message("\n-- VIF (colinéarité, >5 = à surveiller) --"); print(vif_df, row.names = FALSE) }
 
-  invisible(list(ranking = ranking, collinearity = collinearity,
-                 vif = vif_df, table = hex_tab))
+  list(ranking = ranking, collinearity = collinearity, vif = vif_df, table = hex_tab)
+}
+
+
+#' Évaluer les covariables À PARTIR DU PANEL EN CACHE (données réelles)
+#'
+#' Lit le cache produit par src/covariate_build.R et évalue les covariables pour
+#' une année de référence, sans recalcul. C'est le point d'entrée à utiliser sur
+#' les vraies données (l'agrégation ayant déjà été faite par le build).
+#'
+#' @param config_path Chemin du YAML.
+#' @param year Année de référence (défaut : dernière année disponible).
+#' @param outdir Dossier de sortie.
+evaluate.from.cache <- function(config_path = "config.yaml", year = NULL,
+                                outdir = "data/output/covariate_eval") {
+  cfg <- read_yaml(config_path)
+  cache <- load.covariate.panel(cfg)
+  if (is.null(cache)) stop("Aucun cache de covariables : lancez d'abord src/covariate_build.R")
+
+  panel <- cache$data
+  # Année de référence par défaut : la plus infestée (signal le plus fort).
+  if (is.null(year)) {
+    infest <- tapply(panel$severity > 0, panel$year, sum, na.rm = TRUE)
+    year <- as.integer(names(infest)[which.max(infest)])
+  }
+  message("== Évaluation des covariables depuis le cache (année ", year, ") ==")
+
+  df <- panel[panel$year == year, ]
+  cov_names <- names(cache$types)
+  invisible(rank.report.covariates(df, df$target, cache$types, cov_names, outdir))
 }
 
 
@@ -193,11 +237,16 @@ interpret.strength <- function(s) {
 #' grand : c'est le signe qu'elle est redondante. Calcul sans package externe.
 compute.vif <- function(df) {
   vars <- names(df)
+  # Trop peu de lignes complètes (NA fréquents en données réelles) -> VIF non
+  # calculable : on renvoie NA plutôt que de planter.
+  if (sum(stats::complete.cases(df)) < length(vars) + 2) {
+    return(data.frame(covariable = vars, VIF = NA_real_, row.names = NULL))
+  }
   vif <- sapply(vars, function(v) {
     others <- setdiff(vars, v)
     fml <- as.formula(paste0("`", v, "` ~ ", paste0("`", others, "`", collapse = " + ")))
-    r2 <- summary(lm(fml, data = df))$r.squared
-    if (r2 >= 1) Inf else 1 / (1 - r2)
+    r2 <- tryCatch(summary(lm(fml, data = df))$r.squared, error = function(e) NA_real_)
+    if (is.na(r2)) NA_real_ else if (r2 >= 1) Inf else 1 / (1 - r2)
   })
   data.frame(covariable = vars, VIF = round(vif, 2), row.names = NULL)
 }
@@ -254,6 +303,12 @@ demo.covariate.evaluation <- function() {
 
 # Exécution automatique uniquement si le fichier est lancé directement
 # (Rscript src/covariate_evaluation.R), pas quand il est source() par un autre.
+# Si un cache de covariables réelles existe, on l'évalue ; sinon, démo simulée.
 if (sys.nframe() == 0) {
-  demo.covariate.evaluation()
+  cfg_try <- tryCatch(yaml::read_yaml("config.yaml"), error = function(e) NULL)
+  if (!is.null(cfg_try) && !is.null(load.covariate.panel(cfg_try))) {
+    evaluate.from.cache("config.yaml")
+  } else {
+    demo.covariate.evaluation()
+  }
 }

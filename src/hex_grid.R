@@ -55,6 +55,9 @@ weighted.median <- function(x, w = rep(1, length(x))) {
   keep <- !is.na(x) & !is.na(w) & w > 0
   x <- x[keep]; w <- w[keep]
   if (length(x) == 0) return(NA_real_)
+  # Cas dégénérés : une seule valeur (ex. hexagone couvrant une seule cellule
+  # raster) ou valeurs toutes identiques -> pas d'interpolation possible/utile.
+  if (length(x) == 1 || length(unique(x)) == 1) return(x[1])
 
   ord <- order(x)                       # tri des valeurs par ordre croissant
   x <- x[ord]; w <- w[ord]

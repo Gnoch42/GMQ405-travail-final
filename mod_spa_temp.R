@@ -92,45 +92,70 @@ load.project.data <- function(cfg) {
 }
 
 
-#' Harmoniser les libellés d'intensité (gère accents et casse variables)
-normalize.intensity <- function(x, levels) {
-  x <- as.character(x)
-  # Table de correspondance : variantes sans accent -> libellé canonique.
-  key <- gsub("é", "e", tolower(trimws(x)))
-  canon <- setNames(levels, gsub("é", "e", tolower(levels)))
-  out <- canon[key]
-  out[is.na(out)] <- x[is.na(out)]   # on laisse tel quel si non reconnu
-  unname(out)
-}
+# normalize.intensity() est défini dans src/features.R (partagé avec le build).
 
 # Opérateur "valeur par défaut si NULL" (pratique pour lire le YAML).
 `%||%` <- function(a, b) if (is.null(a)) b else a
 
 
 # =============================================================================
+# PRÉPARATION DES DONNÉES DE MODÉLISATION
+# =============================================================================
+
+#' Obtenir le panel hex×année (cible + covariables) pour la modélisation
+#'
+#' Deux sources possibles :
+#'   - CACHE de covariables réelles (data/covariates/panel_hex.rds) produit par
+#'     src/covariate_build.R -> lu tel quel, aucune agrégation refaite.
+#'   - sinon (données simulées ou cache absent) : construit à la volée depuis les
+#'     covariables déclarées dans `data$covariates`.
+#'
+#' @return Liste : $panel (data.frame long), $hex (grille sf),
+#'   $groups (liste nommée covariable -> groupes de modèles concernés).
+prepare.modeling.data <- function(cfg, data, hex) {
+  cache <- if (!isTRUE(cfg$simulate$use_simulated)) load.covariate.panel(cfg) else NULL
+
+  if (!is.null(cache)) {
+    message(">> Covariables : PANEL EN CACHE (", nrow(cache$data), " lignes)")
+    groups <- cache$meta$covariate_groups
+    return(list(panel = cache$data, hex = cache$hex, groups = groups))
+  }
+
+  # Construction à la volée (cas simulé / sans cache).
+  years <- sort(unique(st_drop_geometry(data$target)[[data$target_cfg$year_field]]))
+  built <- build.hex.panel(hex, data$target, data$target_cfg, data$covariates, years,
+                           min_coverage = cfg$hex_grid$min_coverage %||% 0.25)
+  # Sans cache, chaque covariable sert aux deux groupes.
+  groups <- lapply(names(data$covariates), function(x) c("group1", "group2"))
+  names(groups) <- names(data$covariates)
+  list(panel = built$data, hex = built$hex, groups = groups)
+}
+
+#' Noms des covariables concernées par un groupe de modèles donné
+covariates.for.group <- function(groups, which_group) {
+  if (length(groups) == 0) return(character(0))
+  names(groups)[sapply(groups, function(g) which_group %in% g)]
+}
+
+
+# =============================================================================
 # SOUS-PIPELINE GROUPE 1 — prédiction t+1
 # =============================================================================
-run.group1 <- function(hex, data, cfg) {
+run.group1 <- function(panel, hex, cov_names, cfg) {
   message("\n===== GROUPE 1 : prédiction spatio-temporelle t+1 =====")
-  cov_names <- names(data$covariates)
+  message("  Covariables : ", if (length(cov_names)) paste(cov_names, collapse = ", ") else "(aucune)")
 
-  # 1. Panneau long hexagone×année (cible + covariables).
-  years <- sort(unique(st_drop_geometry(data$target)[[data$target_cfg$year_field]]))
-  panel <- build.hex.panel(hex, data$target, data$target_cfg,
-                           data$covariates, years,
-                           min_coverage = cfg$hex_grid$min_coverage %||% 0.25)
+  n_states <- length(levels(panel$target))   # Aucun + niveaux
 
-  n_states <- length(levels(panel$data$target))   # Aucun + niveaux
+  # 1. Paires de transition (t -> t+1) avec pression de voisinage.
+  pairs <- build.transition.pairs(panel, hex, cov_names)
 
-  # 2. Paires de transition (t -> t+1) avec pression de voisinage.
-  pairs <- build.transition.pairs(panel$data, panel$hex, cov_names)
-
-  # 3. Découpage TEMPOREL (jamais aléatoire).
+  # 2. Découpage TEMPOREL (jamais aléatoire).
   splits <- temporal.split(pairs, cfg$models$group1$temporal_split)
   message("  Découpage temporel — train: ", nrow(splits$train),
           " | valid: ", nrow(splits$valid), " | test: ", nrow(splits$test), " paires")
 
-  # 4. Ajustement des modèles demandés.
+  # 3. Ajustement des modèles demandés.
   run <- cfg$models$group1$run %||% c("markov", "rf", "convlstm")
   results <- list()
   if ("markov"   %in% run) results$markov   <- fit.markov(splits, n_states)$result
@@ -146,21 +171,16 @@ run.group1 <- function(hex, data, cfg) {
 # =============================================================================
 # SOUS-PIPELINE GROUPE 2 — analyse à un instant t
 # =============================================================================
-run.group2 <- function(hex, data, cfg) {
+run.group2 <- function(panel, hex, cov_names, cfg) {
   message("\n===== GROUPE 2 : analyse économétrique à un instant t =====")
-  cov_names <- names(data$covariates)
+  message("  Covariables : ", if (length(cov_names)) paste(cov_names, collapse = ", ") else "(aucune)")
   year_t <- cfg$models$group2$year_t
 
-  # Panneau restreint à l'année d'analyse.
-  panel <- build.hex.panel(hex, data$target, data$target_cfg,
-                           data$covariates, year_t,
-                           min_coverage = cfg$hex_grid$min_coverage %||% 0.25)
-  df <- panel$data[panel$data$year == year_t, ]
-
+  df <- panel[panel$year == year_t, ]
   message("  Année analysée : ", year_t, " (", nrow(df), " hexagones)")
   run <- cfg$models$group2$run %||%
     c("ols","slx","sar","sem","durbin","durbin_error","gam")
-  fit.group2(df, panel$hex, cov_names, models = run)
+  fit.group2(df, hex, cov_names, models = run)
 }
 
 
@@ -178,9 +198,14 @@ main <- function(config_path = "config.yaml") {
                          cellsize   = cfg$hex_grid$cellsize,
                          target_crs = cfg$project$target_crs %||% 32198)
 
-  # 3. Sous-pipelines (comparés séparément).
-  res1 <- run.group1(hex, data, cfg)
-  res2 <- run.group2(hex, data, cfg)
+  # 3. Panel de modélisation (cache réel ou construction à la volée).
+  md <- prepare.modeling.data(cfg, data, hex)
+  cov1 <- covariates.for.group(md$groups, "group1")   # prédiction (toutes)
+  cov2 <- covariates.for.group(md$groups, "group2")   # instant t (sous-ensemble)
+
+  # 4. Sous-pipelines (comparés séparément).
+  res1 <- run.group1(md$panel, md$hex, cov1, cfg)
+  res2 <- run.group2(md$panel, md$hex, cov2, cfg)
 
   # 4. Sorties standardisées (par groupe).
   outdir <- cfg$output$dir %||% "data/output/models"
