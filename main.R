@@ -1,10 +1,11 @@
 library(yaml)
 library(sf)
-library(dplyr)
 
+# Ingestion de la config =======================================================
 cfg <- read_yaml("config.yaml")
 
 
+# Extraction des données =======================================================
 # Extraction de la donnée pour les régions d'intérêt. Traitement lourd fait une seule fois
 if(!file.exists(cfg$extraction$TBE$outpath) | cfg$extraction$TBE$force_extraction){
   source("src/data_extraction.R")
@@ -16,9 +17,12 @@ if(!file.exists(cfg$extraction$TBE$outpath) | cfg$extraction$TBE$force_extractio
 #   extract.ieqm.data(cfg)
 # }
 
+
+# Lecture des données ==========================================================
 tbe <- st_read(cfg$target$source)
 study.zone <- st_read(cfg$study_zone$source, layer = cfg$study_zone$layer)
 study.zone <- subset(study.zone, st_drop_geometry(study.zone)[,cfg$study_zone$field] %in% cfg$study_zone$regions)
+
 
 # Construiction de la grille hexagonale ========================================
 source("src/structuration.R")
@@ -28,4 +32,21 @@ tbe.grid.chr <- aggregate_tbe_levels_to_hex(study.zone, tbe, cfg)
 
 # Avec les niveaux en entiers
 tbe.grid.int <- convert_level(tbe.grid)
+
+
+# État actuel de l'épidemie ====================================================
+
+
+
+# Statistiques historiques =====================================================
+
+
+
+# Évolution spatiotemporelle ===================================================
+
+
+
+# Modélisation =================================================================
+
+
 
