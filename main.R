@@ -31,7 +31,7 @@ source("src/structuration.R")
 tbe.grid.chr <- aggregate_tbe_levels_to_hex(study.zone, tbe, cfg)
 
 # Avec les niveaux en entiers
-tbe.grid.int <- convert_level(tbe.grid)
+tbe.grid.int <- convert_level(tbe.grid.chr)
 
 
 # État actuel de l'épidemie ====================================================

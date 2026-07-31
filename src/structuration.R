@@ -24,7 +24,8 @@ convert_levels_col <- function(x) {
     x %in% c("Modere", "Modéré") ~ "2",
     x == "Grave" ~ "3",
     .default = x
-  )
+  ) |>
+    as.integer()
 }
 
 convert_level <- function(x) {
