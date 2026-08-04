@@ -216,32 +216,25 @@ fit.rf <- function(splits, cov_names, n_states, engine = "ranger") {
 # MODÈLE 3 — ConvLSTM (SQUELETTE)
 # -----------------------------------------------------------------------------
 
-#' Squelette ConvLSTM
+#' Ajuster le ConvLSTM et prédire l'état t+1
 #'
-#' Le ConvLSTM travaille sur des SÉQUENCES DE CARTES (tenseur temps × lignes ×
-#' colonnes × canaux) et nécessite : (1) une rasterisation régulière des
-#' hexagones, (2) keras3/torch. Ces dépendances lourdes ne sont pas installées
-#' par défaut. On fournit ici la STRUCTURE et un garde-fou : la fonction renvoie
-#' un résultat standardisé "non_implemente" pour que la comparaison de groupe 1
-#' reste cohérente sans bloquer le pipeline.
+#' L'implémentation (torch) est dans src/model_convlstm.R : rastérisation de la
+#' cible + covariables en séquences d'images, entraînement d'un ConvLSTM, puis
+#' reconversion des cartes prédites en hexagones. Cette fonction fait le lien
+#' avec le pipeline. Si l'implémentation ou le backend torch sont absents, elle
+#' dégrade proprement (résultat "non_disponible") sans bloquer la comparaison.
 #'
-#' Étapes à implémenter (voir méthodologie) :
-#'   1. Rasteriser la cible par année en cartes de mêmes dimensions.
-#'   2. Empiler en tenseur (t, h, w, canaux) + canaux covariables.
-#'   3. Découpage temporel strict (déjà géré par temporal.split en amont).
-#'   4. Définir l'architecture (couches ConvLSTM2D) et entraîner.
-#'   5. Prédire la carte t+1, reconvertir en hexagones, évaluer (kappa pondéré).
-fit.convlstm <- function(splits, n_states) {
-  has_keras <- requireNamespace("keras3", quietly = TRUE) ||
-               requireNamespace("torch",  quietly = TRUE)
-  if (!has_keras) {
-    message("  [ConvLSTM] keras3/torch absent -> squelette non exécuté (voir doc).")
+#' @param hex,cov_names,cfg  Contexte nécessaire au réseau (grille, canaux, config).
+fit.convlstm <- function(splits, n_states, hex = NULL, cov_names = character(0), cfg = NULL) {
+  if (!exists("convlstm.predict.full") || is.null(hex)) {
+    message("  [ConvLSTM] implémentation/contexte absent -> ignoré.")
     return(list(result = standardize.group1.result("ConvLSTM", NULL, NULL,
-                                                    n_states, statut = "non_implemente")))
+                                                    n_states, statut = "non_disponible")))
   }
-  # (Implémentation deep learning à compléter ici.)
-  list(result = standardize.group1.result("ConvLSTM", NULL, NULL,
-                                           n_states, statut = "a_completer"))
+  pred <- convlstm.predict.full(splits$train, splits$test, n_states, hex, cov_names, cfg)
+  statut <- if (is.null(pred)) "non_disponible" else "ok"
+  list(result = standardize.group1.result("ConvLSTM", splits$test$state_t1, pred,
+                                           n_states, statut = statut))
 }
 
 

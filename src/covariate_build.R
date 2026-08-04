@@ -147,21 +147,22 @@ build.winter.tmin <- function(hex, cfg, item, name, years, min_coverage) {
 
   nc_path <- function(y) file.path(clim_dir, sprintf("%s_%d.nc", param, y))
 
+  # Lecture d'un NetCDF + extraction des jours d'un mois cible (robuste : un
+  # fichier absent ou illisible renvoie NULL plutôt que d'interrompre le build).
+  read_months <- function(path, months) {
+    if (!file.exists(path)) return(NULL)
+    r <- tryCatch(rast(path), error = function(e) NULL)
+    if (is.null(r)) { warning("NetCDF illisible, ignoré : ", path); return(NULL) }
+    m <- as.integer(format(terra::time(r), "%m"))
+    if (any(m %in% months)) r[[which(m %in% months)]] else NULL
+  }
+
   rows <- list()
   for (t in years) {
     layers <- list()
-    # Décembre de t-1.
-    if (file.exists(nc_path(t - 1))) {
-      r <- rast(nc_path(t - 1))
-      m <- as.integer(format(terra::time(r), "%m"))
-      if (any(m %in% prev_m)) layers[["prev"]] <- r[[which(m %in% prev_m)]]
-    }
-    # Jan-fév de t.
-    if (file.exists(nc_path(t))) {
-      r <- rast(nc_path(t))
-      m <- as.integer(format(terra::time(r), "%m"))
-      if (any(m %in% curr_m)) layers[["curr"]] <- r[[which(m %in% curr_m)]]
-    }
+    layers[["prev"]] <- read_months(nc_path(t - 1), prev_m)   # décembre de t-1
+    layers[["curr"]] <- read_months(nc_path(t),     curr_m)   # jan-fév de t
+    layers <- layers[!vapply(layers, is.null, logical(1))]
     if (length(layers) == 0) {   # fichiers manquants -> NA
       df <- data.frame(hex_id = hex$hex_id, year = t); df[[name]] <- NA_real_
       rows[[as.character(t)]] <- df; next

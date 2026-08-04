@@ -40,6 +40,7 @@ src/
 ├── models_group1.R       Modèles de prédiction t+1 (+ interfaces de prédiction)
 ├── models_group2.R       Modèles d'analyse à un instant t
 ├── model_evaluation.R    Évaluation comparative + validation croisée spatio-temporelle
+├── model_convlstm.R      ConvLSTM (réseau spatio-temporel, torch)
 ├── viz_tmap.R            Fonctions de cartographie réutilisables (tmap)
 ├── covariate_evaluation.R  OUTIL AUTONOME de sélection des covariables
 ├── covariate_download.R  Téléchargement ciblé des sources (écoforestier, climat)
@@ -59,16 +60,21 @@ install.packages(c("sf", "terra", "yaml", "spdep", "spatialreg", "mgcv",
                    "ggplot2", "corrplot"))
 ```
 
-Optionnels (activent des modèles supplémentaires du groupe 1) :
+Optionnels (activent des modèles supplémentaires du groupe 1) et la cartographie :
 
 ```r
 install.packages(c("ranger", "xgboost"))   # Random Forest / XGBoost
-install.packages("keras3")                  # ConvLSTM (deep learning)
+install.packages("torch"); torch::install_torch()   # ConvLSTM (réseau spatio-temporel)
+install.packages("tmap")                    # cartographie (section 8)
 ```
+
+> Le ConvLSTM utilise `torch`. Après `install.packages("torch")`, il faut
+> lancer **une fois** `torch::install_torch()` pour télécharger le moteur natif
+> (libtorch). Voir `src/model_convlstm.R`.
 
 Si un package optionnel est absent, le modèle correspondant est **ignoré
 proprement** (le pipeline ne plante pas ; le tableau de résultats indique
-`package_manquant`).
+`package_manquant` / `non_disponible`).
 
 ---
 
