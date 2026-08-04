@@ -37,8 +37,10 @@ mod_spa_temp.R            Programme principal : orchestre les 2 groupes de modè
 src/
 ├── hex_grid.R            Grille hexagonale + agrégation spatiale générique
 ├── features.R            Assemblage cible + covariables + chargement du cache
-├── models_group1.R       Modèles de prédiction t+1
+├── models_group1.R       Modèles de prédiction t+1 (+ interfaces de prédiction)
 ├── models_group2.R       Modèles d'analyse à un instant t
+├── model_evaluation.R    Évaluation comparative + validation croisée spatio-temporelle
+├── viz_tmap.R            Fonctions de cartographie réutilisables (tmap)
 ├── covariate_evaluation.R  OUTIL AUTONOME de sélection des covariables
 ├── covariate_download.R  Téléchargement ciblé des sources (écoforestier, climat)
 ├── covariate_build.R     Calcul des 5 covariables -> panel hex×année en cache
@@ -364,7 +366,76 @@ les plus générales). Comparez leurs AIC/BIC pour choisir le meilleur compromis
 
 ---
 
-## 7. Passer en production (résumé)
+## 7. Évaluation approfondie et validation croisée (`src/model_evaluation.R`)
+
+Au-delà du tableau de comparaison rapide (section 6.1), ce module fournit une
+**évaluation rigoureuse et comparable** des trois modèles de prédiction, à
+relancer à chaque ajustement. Il se lance sur le cache de covariables :
+
+```bash
+Rscript src/model_evaluation.R
+```
+
+**Deux niveaux de validation, le même découpage pour les trois modèles :**
+
+- **Validation croisée par blocs spatiaux** : les hexagones sont regroupés en
+  3 à 5 **blocs contigus** (`n_spatial_blocks`) ; chaque bloc sert de test à tour
+  de rôle. On obtient une **distribution** de performance (moyenne ± écart-type),
+  bien plus fiable qu'un seul chiffre. Les blocs sont contigus (et non un tirage
+  aléatoire d'hexagones) pour éviter la **fuite d'information** : des voisins
+  corrélés se retrouveraient sinon à la fois dans l'entraînement et le test, à
+  cause de l'autocorrélation spatiale, ce qui gonflerait la performance.
+- **Test temporel final** : on réserve une **phase de déclin** du cycle
+  (`test_years`) jamais vue à l'entraînement. C'est le test le plus exigeant :
+  capturer la dynamique de rémission, pas seulement interpoler.
+
+> ⚠️ Vos données couvrent 2014-2025, soit une seule épidémie en cours (pas
+> plusieurs cycles complets). Renseignez `evaluation.train_years` /
+> `evaluation.test_years` pour désigner vous-même la phase de déclin pertinente.
+
+**Métriques produites** (`data/output/evaluation/`) :
+
+| Sortie | Contenu |
+|---|---|
+| `comparaison_modeles.csv` | par modèle : kappa pondéré spatial (moy ± sd), kappa pondéré temporel, exactitude |
+| `precision_rappel_par_classe.csv` | précision et rappel **par état** (repère la sous-performance sur les classes rares comme « Sévère ») |
+| `confusion_<modele>.png` / `.csv` | matrice de confusion (comptes + % par ligne) |
+| `kappa_simulation_markov.csv` | décomposition **quantité / localisation** (Pontius) pour le Markov |
+
+- **Kappa pondéré (quadratique)** : métrique principale car les états sont
+  ordinaux — se tromper de deux classes coûte quatre fois plus que d'une seule.
+- **Kappa simulation (Markov)** : sépare deux erreurs — `k_quantity` (le modèle
+  prédit-il la bonne *proportion* de chaque état ?) et `k_location` (les place-t-il
+  au bon *endroit* ?). Un bon `k_quantity` mais un mauvais `k_location` signale un
+  modèle qui « compte » juste mais « localise » mal.
+
+## 8. Cartographie (`src/viz_tmap.R`)
+
+Deux fonctions réutilisables, au **style uniforme** (même palette, typographie et
+légende), applicables à n'importe quel objet `sf` du projet :
+
+```r
+source("src/viz_tmap.R")
+# 1) Variable brute sur la grille hexagonale (continue ou catégorielle) :
+plot_donnees_brutes(hex, "prop_hote", titre = "Essences hôtes",
+                    export = "data/output/viz/hote.png")
+# 2) Lissage gaussien -> surface raster continue (gradients lisibles) :
+plot_flou_gaussien(hex, "prop_hote", sigma = 3000, resolution = 250,
+                   export = "data/output/viz/hote_flou.png")
+```
+
+- **`plot_donnees_brutes()`** détecte le type de variable : les états TBE
+  (Absence → Sévère) reçoivent une palette ordonnée dédiée (jaune → rouge foncé,
+  « Absence » en gris) ; les variables continues un gradient viridis.
+- **`plot_flou_gaussien()`** rastérise puis applique un flou gaussien d'écart-type
+  `sigma` (en mètres) : utile pour visualiser un gradient de pression
+  d'infestation ou de risque sans l'effet « mosaïque » des hexagones.
+- `export = NULL` affiche seulement ; un chemin (`.png`, `.pdf`) enregistre à la
+  résolution `dpi`. Lancer `Rscript src/viz_tmap.R` produit une démo depuis le cache.
+
+---
+
+## 9. Passer en production (résumé)
 
 1. Télécharger les données réelles (voir `README.md`).
 2. Copier `config_example.yaml` → `config.yaml`.

@@ -163,3 +163,14 @@ models:
 # --- Sorties ---
 output:
   dir: "data/output/models"
+
+# --- Évaluation comparative des modèles (src/model_evaluation.R) ---
+# CV par blocs spatiaux (généralisation dans l'espace) + test temporel sur la
+# phase de déclin réservée (généralisation dans le temps). Même découpage pour
+# les trois modèles. Par défaut, réutilise le découpage temporel du groupe 1 ;
+# renseigner train_years/test_years pour désigner explicitement la phase de déclin.
+evaluation:
+  n_spatial_blocks: 4          # nombre de blocs spatiaux contigus (3 à 5)
+  train_years: [2014, 2019]    # cycle(s) d'entraînement
+  test_years:  [2022, 2022]    # phase de déclin réservée (test temporel)
+  outdir: "data/output/evaluation"
