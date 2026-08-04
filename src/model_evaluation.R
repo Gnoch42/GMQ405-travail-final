@@ -369,6 +369,95 @@ plot.class.recall <- function(class_tab, outdir, labels = ETATS_TBE) {
 
 
 # =============================================================================
+# CARTOGRAPHIE DES RÉSULTATS ET DE L'ERREUR SUR LE TERRITOIRE
+# =============================================================================
+
+#' Cartographier, sur la grille hexagonale, l'observé / le prédit / l'erreur
+#'
+#' Pour une année de test donnée et un ou plusieurs modèles, produit (via les
+#' fonctions de src/viz_tmap.R) :
+#'   - la carte de l'intensité OBSERVÉE ;
+#'   - la carte de l'intensité PRÉDITE par le modèle ;
+#'   - la carte de l'ERREUR (sous-estimation / correct / surestimation) ;
+#'   - une surface lissée de l'AMPLEUR de l'erreur (où les erreurs se concentrent).
+#'
+#' @param models   Noms des modèles à cartographier (parmi ceux du registre).
+#' @param year_t   Année de départ t (on cartographie la prédiction pour t+1).
+#'                 Par défaut : l'année de test la plus infestée (signal maximal).
+#' @param outdir   Dossier des cartes.
+map.territory.results <- function(config_path = "config.yaml",
+                                  models = c("Markov spatial", "ConvLSTM"),
+                                  year_t = NULL,
+                                  outdir = "data/output/evaluation/cartes") {
+  source("src/viz_tmap.R")
+  dir.create(outdir, recursive = TRUE, showWarnings = FALSE)
+  cfg <- yaml::read_yaml(config_path)
+  cache <- load.covariate.panel(cfg)
+  if (is.null(cache)) stop("Aucun cache de covariables : lancez src/covariate_build.R")
+
+  panel <- cache$data; hex <- cache$hex
+  cov_names <- names(cache$types); n_states <- length(levels(panel$target))
+  labels <- levels(panel$target)
+  pairs <- build.transition.pairs(panel, hex, cov_names)
+
+  ev <- cfg$evaluation %||% list(); sp <- cfg$models$group1$temporal_split
+  train_y <- ev$train_years %||% sp$train_years
+  test_y  <- ev$test_years  %||% sp$test_years
+  train <- pairs[pairs$year_t >= train_y[1] & pairs$year_t <= train_y[2], ]
+  test  <- pairs[pairs$year_t >= test_y[1]  & pairs$year_t <= test_y[2], ]
+
+  # Année de test à cartographier : la plus infestée (signal le plus fort).
+  if (is.null(year_t)) {
+    infest <- tapply(test$state_t1 > 0, test$year_t, sum)
+    year_t <- as.integer(names(infest)[which.max(infest)])
+  }
+  message("Cartographie pour l'année prédite ", year_t + 1, " (transition depuis ", year_t, ")")
+
+  registry <- build.model.registry(cov_names, n_states, hex, cfg)
+  registry <- registry[sapply(registry, function(m) m$name %in% models)]
+
+  # Carte de l'intensité observée (commune à tous les modèles).
+  sel0 <- test$year_t == year_t
+  obs <- setNames(test$state_t1[sel0], test$hex_id[sel0])
+  hex$observe <- factor(labels[obs[as.character(hex$hex_id)] + 1], levels = labels, ordered = TRUE)
+  plot_donnees_brutes(hex, "observe", titre = paste("Intensité TBE observée —", year_t + 1),
+                      export = file.path(outdir, "observe.png"))
+
+  err_levels <- c("Sous-estimation", "Correct", "Surestimation")
+  err_pal <- c("Sous-estimation" = "#2166ac", "Correct" = "#f7f7f7", "Surestimation" = "#b2182b")
+
+  for (mdl in registry) {
+    pred <- mdl$predict(train, test)
+    if (is.null(pred)) { message("  ", mdl$name, " : pas de prédiction -> ignoré."); next }
+    slug <- gsub("[^A-Za-z0-9]+", "_", tolower(mdl$name))
+
+    prd <- setNames(pred[sel0], test$hex_id[sel0])
+    p <- prd[as.character(hex$hex_id)]; o <- obs[as.character(hex$hex_id)]
+    hy <- hex
+    hy$predit <- factor(labels[p + 1], levels = labels, ordered = TRUE)
+    diff <- p - o
+    hy$erreur <- factor(ifelse(is.na(diff), NA,
+                        ifelse(diff == 0, "Correct",
+                        ifelse(diff > 0, "Surestimation", "Sous-estimation"))),
+                        levels = err_levels)
+    hy$erreur_ampl <- abs(diff)
+
+    plot_donnees_brutes(hy, "predit",
+      titre = paste0("Intensité prédite (", mdl$name, ") — ", year_t + 1),
+      export = file.path(outdir, paste0("predit_", slug, ".png")))
+    plot_donnees_brutes(hy, "erreur", palette = err_pal,
+      titre = paste0("Erreur de prédiction (", mdl$name, ") — ", year_t + 1),
+      export = file.path(outdir, paste0("erreur_", slug, ".png")))
+    plot_flou_gaussien(hy, "erreur_ampl", sigma = cfg$hex_grid$cellsize %||% 5000,
+      resolution = 1000,
+      titre = paste0("Ampleur de l'erreur lissée (", mdl$name, ") — ", year_t + 1),
+      export = file.path(outdir, paste0("erreur_lissee_", slug, ".png")))
+  }
+  message("Cartes écrites dans : ", outdir)
+}
+
+
+# =============================================================================
 # POINT D'ENTRÉE : évaluation depuis le cache de covariables
 # =============================================================================
 

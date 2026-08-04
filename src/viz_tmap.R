@@ -103,11 +103,17 @@ plot_donnees_brutes <- function(x, var, titre = NULL, palette = NULL,
   is_cat <- is.factor(vals) || is.character(vals)
 
   if (is_cat) {
-    # Catégoriel / ordinal : palette dédiée si les niveaux sont ceux de la TBE.
     lvls <- if (is.factor(vals)) levels(vals) else sort(unique(vals))
-    pal  <- palette %||% if (all(lvls %in% names(PALETTE_TBE))) PALETTE_TBE[lvls] else "brewer.set2"
-    scale <- if (is.ordered(vals)) tm_scale_ordinal(values = pal)
-             else                  tm_scale_categorical(values = pal)
+    if (is.ordered(vals)) {
+      # Ordinal (ex. intensité TBE) : palette SÉQUENTIELLE (jaune -> rouge),
+      # indépendante des libellés exacts. Une palette explicite reste prioritaire.
+      pal <- palette %||% "brewer.yl_or_rd"
+      scale <- tm_scale_ordinal(values = pal)
+    } else {
+      # Catégoriel non ordonné : palette dédiée TBE si applicable, sinon Set2.
+      pal <- palette %||% if (all(lvls %in% names(PALETTE_TBE))) unname(PALETTE_TBE[lvls]) else "brewer.set2"
+      scale <- tm_scale_categorical(values = pal)
+    }
   } else {
     # Continu : gradient séquentiel discrétisé.
     pal   <- palette %||% PALETTE_CONTINU
