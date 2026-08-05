@@ -33,6 +33,8 @@ source("src/hex_grid.R")            # grille + agrégation spatiale générique
 source("src/features.R")            # assemblage cible + covariables sur la grille
 source("src/models_group1.R")       # prédiction t+1
 source("src/models_group2.R")       # analyse à un instant t
+# ConvLSTM (torch) : chargé si disponible ; sinon le modèle dégrade proprement.
+try(source("src/model_convlstm.R"), silent = TRUE)
 
 
 # =============================================================================
@@ -160,7 +162,7 @@ run.group1 <- function(panel, hex, cov_names, cfg) {
   results <- list()
   if ("markov"   %in% run) results$markov   <- fit.markov(splits, n_states)$result
   if ("rf"       %in% run) results$rf       <- fit.rf(splits, cov_names, n_states)$result
-  if ("convlstm" %in% run) results$convlstm <- fit.convlstm(splits, n_states)$result
+  if ("convlstm" %in% run) results$convlstm <- fit.convlstm(splits, n_states, hex, cov_names, cfg)$result
 
   out <- do.call(rbind, results)
   rownames(out) <- NULL

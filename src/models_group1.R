@@ -110,6 +110,41 @@ build.transition.pairs <- function(panel, hex, cov_names) {
 
 
 # -----------------------------------------------------------------------------
+# INTERFACES DE PRÉDICTION PURES
+# -----------------------------------------------------------------------------
+# Chaque fonction prend un jeu d'ENTRAÎNEMENT et un jeu de TEST (data.frames de
+# paires produits par build.transition.pairs) et renvoie un vecteur d'états
+# prédits (entiers 0..k) aligné sur les lignes du test, ou NULL si le modèle ne
+# peut pas s'exécuter. Ces interfaces sont réutilisées à la fois par le pipeline
+# principal (fit.*) ET par le module d'évaluation (validation croisée).
+
+#' Prédiction Markov : état le plus probable selon la matrice de transition
+markov.predict <- function(train, test, n_states) {
+  if (nrow(train) == 0 || nrow(test) == 0) return(NULL)
+  states <- 0:(n_states - 1)
+  trans <- table(factor(train$state_t,  levels = states),
+                 factor(train$state_t1, levels = states))
+  probs <- prop.table(trans + 1e-9, margin = 1)     # lignes -> probabilités
+  states[apply(probs[as.character(test$state_t), , drop = FALSE], 1, which.max)]
+}
+
+#' Prédiction Random Forest (ranger) sur l'état t+1
+rf.predict <- function(train, test, cov_names, n_states, engine = "ranger") {
+  if (!requireNamespace(engine, quietly = TRUE)) return(NULL)
+  predictors <- c("state_t", "neigh_pressure", cov_names)
+  train_ok <- train[complete.cases(train[, predictors]), ]
+  if (nrow(train_ok) < 10 || nrow(test) == 0) return(NULL)
+  train_ok$state_t1 <- factor(train_ok$state_t1, levels = 0:(n_states - 1))
+  fml <- as.formula(paste("state_t1 ~", paste(predictors, collapse = " + ")))
+  m <- ranger::ranger(fml, data = train_ok, num.trees = 300, probability = FALSE)
+  as.integer(as.character(predict(m, test)$predictions))
+}
+
+#' Prédiction ConvLSTM (squelette : non implémenté -> NULL)
+convlstm.predict <- function(train, test, n_states) NULL
+
+
+# -----------------------------------------------------------------------------
 # MODÈLE 1 — MARKOV SPATIAL (CA-Markov)
 # -----------------------------------------------------------------------------
 
@@ -135,18 +170,11 @@ fit.markov <- function(splits, n_states) {
     return(list(result = standardize.group1.result("Markov spatial", NULL, NULL,
                                                     n_states, statut = "test_vide")))
 
-  # Matrice de comptage des transitions observées.
-  trans <- table(factor(train$state_t,  levels = states),
-                 factor(train$state_t1, levels = states))
-  # Normalisation par ligne -> probabilités (gère les lignes vides).
-  probs <- prop.table(trans + 1e-9, margin = 1)   # +epsilon évite division par 0
-
-  # Prédiction sur le test : état le plus probable depuis l'état de départ.
+  # Prédiction via l'interface pure (matrice de transition + état le + probable).
   test <- splits$test
-  pred <- states[apply(probs[as.character(test$state_t), , drop = FALSE], 1, which.max)]
-
+  pred <- markov.predict(train, test, n_states)
   res <- standardize.group1.result("Markov spatial", test$state_t1, pred, n_states)
-  list(matrix = probs, result = res)
+  list(result = res)
 }
 
 
@@ -178,13 +206,9 @@ fit.rf <- function(splits, cov_names, n_states, engine = "ranger") {
     return(list(result = standardize.group1.result("Random Forest", NULL, NULL,
                                                     n_states, statut = "test_vide")))
 
-  train_ok$state_t1 <- factor(train_ok$state_t1, levels = 0:(n_states - 1))
-  fml <- as.formula(paste("state_t1 ~", paste(predictors, collapse = " + ")))
-  m <- ranger::ranger(fml, data = train_ok, num.trees = 300, probability = FALSE)
-  pred <- as.integer(as.character(predict(m, test)$predictions))
-
+  pred <- rf.predict(train, test, cov_names, n_states, engine)
   res <- standardize.group1.result("Random Forest", test$state_t1, pred, n_states)
-  list(model = m, result = res)
+  list(result = res)
 }
 
 
@@ -192,32 +216,25 @@ fit.rf <- function(splits, cov_names, n_states, engine = "ranger") {
 # MODÈLE 3 — ConvLSTM (SQUELETTE)
 # -----------------------------------------------------------------------------
 
-#' Squelette ConvLSTM
+#' Ajuster le ConvLSTM et prédire l'état t+1
 #'
-#' Le ConvLSTM travaille sur des SÉQUENCES DE CARTES (tenseur temps × lignes ×
-#' colonnes × canaux) et nécessite : (1) une rasterisation régulière des
-#' hexagones, (2) keras3/torch. Ces dépendances lourdes ne sont pas installées
-#' par défaut. On fournit ici la STRUCTURE et un garde-fou : la fonction renvoie
-#' un résultat standardisé "non_implemente" pour que la comparaison de groupe 1
-#' reste cohérente sans bloquer le pipeline.
+#' L'implémentation (torch) est dans src/model_convlstm.R : rastérisation de la
+#' cible + covariables en séquences d'images, entraînement d'un ConvLSTM, puis
+#' reconversion des cartes prédites en hexagones. Cette fonction fait le lien
+#' avec le pipeline. Si l'implémentation ou le backend torch sont absents, elle
+#' dégrade proprement (résultat "non_disponible") sans bloquer la comparaison.
 #'
-#' Étapes à implémenter (voir méthodologie) :
-#'   1. Rasteriser la cible par année en cartes de mêmes dimensions.
-#'   2. Empiler en tenseur (t, h, w, canaux) + canaux covariables.
-#'   3. Découpage temporel strict (déjà géré par temporal.split en amont).
-#'   4. Définir l'architecture (couches ConvLSTM2D) et entraîner.
-#'   5. Prédire la carte t+1, reconvertir en hexagones, évaluer (kappa pondéré).
-fit.convlstm <- function(splits, n_states) {
-  has_keras <- requireNamespace("keras3", quietly = TRUE) ||
-               requireNamespace("torch",  quietly = TRUE)
-  if (!has_keras) {
-    message("  [ConvLSTM] keras3/torch absent -> squelette non exécuté (voir doc).")
+#' @param hex,cov_names,cfg  Contexte nécessaire au réseau (grille, canaux, config).
+fit.convlstm <- function(splits, n_states, hex = NULL, cov_names = character(0), cfg = NULL) {
+  if (!exists("convlstm.predict.full") || is.null(hex)) {
+    message("  [ConvLSTM] implémentation/contexte absent -> ignoré.")
     return(list(result = standardize.group1.result("ConvLSTM", NULL, NULL,
-                                                    n_states, statut = "non_implemente")))
+                                                    n_states, statut = "non_disponible")))
   }
-  # (Implémentation deep learning à compléter ici.)
-  list(result = standardize.group1.result("ConvLSTM", NULL, NULL,
-                                           n_states, statut = "a_completer"))
+  pred <- convlstm.predict.full(splits$train, splits$test, n_states, hex, cov_names, cfg)
+  statut <- if (is.null(pred)) "non_disponible" else "ok"
+  list(result = standardize.group1.result("ConvLSTM", splits$test$state_t1, pred,
+                                           n_states, statut = statut))
 }
 
 

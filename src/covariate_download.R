@@ -24,6 +24,28 @@ source("src/features.R")   # load.study.zone()
 
 `%||%` <- function(a, b) if (is.null(a)) b else a
 
+#' Téléchargement ROBUSTE d'un gros fichier (curl : reprise + réessais)
+#'
+#' download.file() de base est peu fiable pour les fichiers volumineux (~1 Go)
+#' du serveur MFFP : délai court, troncature silencieuse. On délègue à `curl`
+#' avec reprise (-C -), réessais et suivi des redirections, puis on vérifie que
+#' la taille finale correspond bien à l'en-tête du serveur.
+robust.download <- function(url, dest) {
+  status <- system2("curl", c("-fL", "-C", "-", "--retry", "4", "--retry-delay", "5",
+                              "-o", shQuote(dest), shQuote(url)))
+  if (status != 0 || !file.exists(dest))
+    stop("Échec du téléchargement : ", url, " (code curl ", status, ")")
+  # Vérification de complétude via l'en-tête Content-Length.
+  hdr <- suppressWarnings(system2("curl", c("-sIL", shQuote(url)), stdout = TRUE))
+  cl  <- grep("(?i)content-length", hdr, value = TRUE, perl = TRUE)
+  if (length(cl) > 0) {
+    expected <- as.numeric(sub("\\D+", "", tail(cl, 1)))
+    if (!is.na(expected) && file.info(dest)$size < expected)
+      stop("Fichier incomplet (", file.info(dest)$size, " < ", expected, " o) : ", url)
+  }
+  invisible(dest)
+}
+
 
 # -----------------------------------------------------------------------------
 # 1. ÉCOFORESTIÈRE — feuillets intersectant la zone
@@ -72,14 +94,21 @@ download.ecoforest.tiles <- function(cfg) {
     zip_path <- file.path(eco$download_dir, basename(url))
     if (!file.exists(zip_path)) {
       message("  [", tile, "] téléchargement du ZIP (~1 Go)...")
-      utils::download.file(url, zip_path, mode = "wb", quiet = TRUE)
+      robust.download(url, zip_path)
     }
 
-    gpkg_name <- utils::unzip(zip_path, list = TRUE)$Name[1]
+    # Sélection du bon .gpkg dans le ZIP. Certains feuillets contiennent DEUX
+    # variantes dans un sous-dossier : "_C" (compilée, avec attributs dérivés) et
+    # "_NC" (non compilée). On privilégie la variante compilée ; sinon l'unique
+    # .gpkg présent.
+    entries <- utils::unzip(zip_path, list = TRUE)$Name
+    gpkgs   <- entries[grepl("\\.gpkg$", entries, ignore.case = TRUE)]
+    compiled <- gpkgs[grepl("_C\\.gpkg$", gpkgs, ignore.case = TRUE)]
+    gpkg_name <- if (length(compiled) > 0) compiled[1] else gpkgs[1]
     raw_gpkg <- file.path(eco$download_dir, gpkg_name)
     if (!file.exists(raw_gpkg)) {
-      message("  [", tile, "] décompression...")
-      utils::unzip(zip_path, exdir = eco$download_dir)
+      message("  [", tile, "] décompression (", basename(gpkg_name), ")...")
+      utils::unzip(zip_path, files = gpkg_name, exdir = eco$download_dir)
     }
 
     clip.ecoforest.tile(raw_gpkg, zone, eco, clip_gpkg, tile)
@@ -149,7 +178,7 @@ download.climate.files <- function(cfg, parameter, years) {
     if (!file.exists(dest)) {
       message("  climat : téléchargement ", fname, " (~",
               round(sel$Taille_Ko[i] / 1024), " Mo)...")
-      utils::download.file(sel[[clim$url_field]][i], dest, mode = "wb", quiet = TRUE)
+      robust.download(sel[[clim$url_field]][i], dest)
     } else {
       message("  climat : ", fname, " déjà présent -> ignoré.")
     }

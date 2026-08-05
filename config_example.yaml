@@ -19,7 +19,7 @@ extraction:
     regions: ['La Matanie', 'La Matapédia']
 
 hex_grid:
-  cellsize: 10000       # Taille de cellule en mètres (ex: 10000 = hexagones de 10 km)
+  cellsize: 5000        # Taille de cellule en mètres (5000 = hexagones de 5 km ; adapté à 2 MRC)
   min_coverage: 0.25    # Couverture minimale d'un hexagone pour recevoir une valeur (0-1)
   outpath: "data/hex_grid.gpkg"
   force_creation: FALSE
@@ -36,9 +36,9 @@ project:
 # Si cette section est retirée, la zone = emprise (bounding box) de la cible.
 study_zone:
   source: "data/SDA.gpkg"
-  layer: "munic_s"
-  field: "MUS_NM_MUN"
-  regions: ["Matane"]
+  layer: "mrc_s"
+  field: "MRS_NM_MRC"
+  regions: ["La Matanie", "La Matapédia"]
 
 # --- Variable cible (intensité TBE) ---
 target:
@@ -153,13 +153,36 @@ models:
   group1:                        # prédiction t+1
     run: ["markov", "rf", "convlstm"]
     temporal_split:              # bornes INCLUSIVES sur l'année de départ (t)
-      train_years: [2014, 2020]
-      valid_years: [2021, 2022]
+      train_years: [2014, 2021]
+      valid_years: [2022, 2022]
       test_years:  [2023, 2024]
   group2:                        # analyse à un instant t
-    year_t: 2022
+    year_t: 2021
     run: ["ols", "slx", "sar", "sem", "durbin", "durbin_error", "gam"]
 
 # --- Sorties ---
 output:
   dir: "data/output/models"
+
+# --- Évaluation comparative des modèles (src/model_evaluation.R) ---
+# CV par blocs spatiaux (généralisation dans l'espace) + test temporel sur la
+# phase de déclin réservée (généralisation dans le temps). Même découpage pour
+# les trois modèles. Par défaut, réutilise le découpage temporel du groupe 1 ;
+# renseigner train_years/test_years pour désigner explicitement la phase de déclin.
+evaluation:
+  n_spatial_blocks: 4          # nombre de blocs spatiaux contigus (3 à 5)
+  train_years: [2014, 2021]    # cycle(s) d'entraînement
+  test_years:  [2023, 2024]    # phase de déclin réservée (test temporel)
+  outdir: "data/output/evaluation"
+
+# --- ConvLSTM (réseau spatio-temporel, groupe 1) ---
+# Nécessite le backend torch : torch::install_torch() (téléchargement unique).
+# Voir src/model_convlstm.R. Ne participe qu'au test temporel (pas à la CV
+# spatiale, non définie pour un réseau raisonnant sur la carte entière).
+convlstm:
+  raster_res: 2000     # résolution (m) de la rastérisation cible/covariables
+  seq_len: 4           # longueur de séquence (années) en entrée
+  hidden: 16           # canaux cachés de la couche ConvLSTM
+  epochs: 60           # itérations d'entraînement
+  lr: 0.01             # taux d'apprentissage
+  use_covariates: true # ajouter les covariables comme canaux additionnels
