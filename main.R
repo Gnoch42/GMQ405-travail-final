@@ -19,9 +19,11 @@ if(!file.exists(cfg$extraction$TBE$outpath) | cfg$extraction$TBE$force_extractio
 
 
 # Lecture des données ==========================================================
-tbe <- st_read(cfg$target$source)
+tbe <- st_read(cfg$target$source) |>
+  st_transform(cfg$project$target_crs)
 study.zone <- st_read(cfg$study_zone$source, layer = cfg$study_zone$layer)
-study.zone <- subset(study.zone, st_drop_geometry(study.zone)[,cfg$study_zone$field] %in% cfg$study_zone$regions)
+study.zone <- subset(study.zone, st_drop_geometry(study.zone)[,cfg$study_zone$field] %in% cfg$study_zone$regions) |>
+  st_transform(cfg$project$target_crs)
 
 
 # Construiction de la grille hexagonale ========================================
@@ -31,7 +33,7 @@ source("src/structuration.R")
 tbe.grid.chr <- aggregate_tbe_levels_to_hex(study.zone, tbe, cfg)
 
 # Avec les niveaux en entiers
-tbe.grid.int <- convert_level(tbe.grid)
+tbe.grid.int <- convert_level(tbe.grid.chr)
 
 
 # État actuel de l'épidemie ====================================================
@@ -43,7 +45,18 @@ tbe.grid.int <- convert_level(tbe.grid)
 
 
 # Évolution spatiotemporelle ===================================================
+source("src/spattemp_dynamic.R")
+source("src/plotting.R")
 
+moran.df <- test_W_mat(tbe.grid.int[,"Niveau_2025"])
+moran.I.comparison(moran.df)
+# Nous en concluons que la matrice Queen est la meilleure pour faire ressortir
+# l'autocorrélation spatiale (identique à Rook dans les circonstances)
+
+W.Queen <- poly2nb(tbe.grid.int) |>
+  nb2listw(zero.policy = TRUE)
+
+tbe.grid.lisa <- lisa_analysis(tbe.grid.int, W.Queen, cfg)
 
 
 # Modélisation =================================================================
