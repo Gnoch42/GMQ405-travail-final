@@ -19,9 +19,11 @@ if(!file.exists(cfg$extraction$TBE$outpath) | cfg$extraction$TBE$force_extractio
 
 
 # Lecture des données ==========================================================
-tbe <- st_read(cfg$target$source)
+tbe <- st_read(cfg$target$source) |>
+  st_transform(cfg$project$target_crs)
 study.zone <- st_read(cfg$study_zone$source, layer = cfg$study_zone$layer)
-study.zone <- subset(study.zone, st_drop_geometry(study.zone)[,cfg$study_zone$field] %in% cfg$study_zone$regions)
+study.zone <- subset(study.zone, st_drop_geometry(study.zone)[,cfg$study_zone$field] %in% cfg$study_zone$regions) |>
+  st_transform(cfg$project$target_crs)
 
 
 # Construiction de la grille hexagonale ========================================
