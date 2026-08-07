@@ -37,3 +37,24 @@ extract.ieqm.data <- function(cfg) {
   output.data <- subset(output.data, !duplicated(output.data))
   st_write(output.data, cfg$extraction$IEQM$outpath, append = FALSE)
 }
+
+
+extract.St_Laurent <- function(cfg) {
+  grhq.list <- list.files(cfg$extraction$GRHQ$inpath, full.names = TRUE)
+  output.data <- NULL
+  
+  for (file in grhq.list){
+    grhq <- st_read(file, layer = "RH_S") |>
+      subset(TOPONYME == "Fleuve Saint-Laurent")
+    
+    if(is.null(output.data)){
+      output.data <- grhq
+    } else {
+      output.data <- rbind(output.data, grhq)
+    }
+  }
+  output.data <- subset(output.data, !duplicated(output.data)) |>
+    st_union() |>
+    st_as_sf()
+  st_write(output.data, cfg$extraction$GRHQ$outpath, append = FALSE)
+}

@@ -75,3 +75,19 @@ test_W_mat <- function(data) {
                          p.value = p.values)
   return(moran.df)
 }
+
+compute.group.means <- function(data, grouping.fields, mean.fields, cfg) {
+  output <- data.frame(matrix(ncol = length(grouping.fields), nrow = length(mean.fields)), row.names = mean.fields)
+  names(output) <- grouping.fields
+  output["year"] <- as.numeric(gsub("\\D", "", mean.fields))
+  
+  for (field in mean.fields) {
+    for (group in grouping.fields) {
+      wheights <- ifelse(data[[group]] > cfg$geocmeans$group_mean_thr, data[[group]], 0)
+      mean <- weighted.mean(data[[field]], wheights)
+      output[field, group] <- mean
+    }
+  }
+  
+  return(output)
+}
