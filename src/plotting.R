@@ -21,7 +21,7 @@ moran.I.comparison <- function(df) {
 }
 
 lisa.map <- function(data, field, year) {
-  colors <- c("red", "blue", "lightpink", "skyblue2", "lightgray")
+  colors <- c("red", "lightpink", "blue", "skyblue2", "lightgray")
   
   map <- tm_shape(data) +
     tm_polygons(
@@ -40,13 +40,13 @@ lisa.map <- function(data, field, year) {
     tm_title(year) +
     tm_layout(frame = FALSE)
   
-  tmap_save(map, paste0("data/maps/lisa_", year, ".png"), width = 5, height = 4, dpi = 300)
+  tmap_save(map, paste0("data/maps/lisa_", year, "legend.png"), width = 5, height = 4, dpi = 300)
   
   return(map)
 }
 
 lisa.map.no.legend <- function(data, field, year) {
-  colors <- c("red", "blue", "lightpink", "skyblue2", "lightgray")
+  colors <- c("red", "lightpink", "blue", "skyblue2", "lightgray")
   
   map <- tm_shape(data) +
     tm_polygons(

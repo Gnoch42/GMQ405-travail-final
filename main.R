@@ -53,9 +53,11 @@ tbe.grid.int <- convert_level(tbe.grid.chr)
 
 
 # Évolution spatiotemporelle ===================================================
+library(geocmeans)
 source("src/spattemp_dynamic.R")
 source("src/plotting.R")
 
+# LISA
 moran.df <- test_W_mat(tbe.grid.int[,"Niveau_2025"])
 moran.I.comparison(moran.df)
 # Nous en concluons que la matrice Queen est la meilleure pour faire ressortir
@@ -67,32 +69,20 @@ W.Queen <- poly2nb(tbe.grid.int) |>
 tbe.grid.lisa <- lisa_analysis(tbe.grid.int, W.Queen, cfg)
 
 # Cartographie par année
-map.2014 <- lisa.map.no.legend(tbe.grid.lisa, "typo_2014", "2014")
-map.2015 <- lisa.map.no.legend(tbe.grid.lisa, "typo_2015", "2015")
-map.2016 <- lisa.map.no.legend(tbe.grid.lisa, "typo_2016", "2016")
-map.2017 <- lisa.map.no.legend(tbe.grid.lisa, "typo_2017", "2017")
-map.2018 <- lisa.map.no.legend(tbe.grid.lisa, "typo_2018", "2018")
-map.2019 <- lisa.map.no.legend(tbe.grid.lisa, "typo_2019", "2019")
-map.2020 <- lisa.map.no.legend(tbe.grid.lisa, "typo_2020", "2020")
-map.2021 <- lisa.map.no.legend(tbe.grid.lisa, "typo_2021", "2021")
-map.2022 <- lisa.map.no.legend(tbe.grid.lisa, "typo_2022", "2022")
-map.2023 <- lisa.map.no.legend(tbe.grid.lisa, "typo_2023", "2023")
-map.2024 <- lisa.map.no.legend(tbe.grid.lisa, "typo_2024", "2024")
-map.2025 <- lisa.map(tbe.grid.lisa, "typo_2025", "2025")
+for (year in cfg$lisa_analysis$start:cfg$lisa_analysis$end) {
+  lisa.map.no.legend(tbe.grid.lisa, paste0("typo_", year), year)
+}
+lisa.map(tbe.grid.lisa, "typo_2025", "2025")
 
 
-
-# ******************************************************************************
-library(geocmeans)
-library(ggpubr)
-
+# Geo c-means
 tbe.zscore <- st_drop_geometry(tbe.grid.lisa[,names(tbe.grid.lisa)[startsWith(names(tbe.grid.lisa), "z")]])
 
 ## Optimisation m
 FCM_selection <- select_parameters(
   algo = "FCM",
   data = tbe.zscore,
-  k = 4,
+  k = cfg$geocmeans$k,
   m = seq(1.1, 3, 0.1),
   classidx = TRUE,
   spconsist = FALSE,
@@ -106,8 +96,8 @@ m.comparison(FCM_selection)
 SFCM_selection <- select_parameters(
   algo = "SFCM",
   data = tbe.zscore,
-  k = 4,
-  m = 1.6,
+  k = cfg$geocmeans$k,
+  m = cfg$geocmeans$m,
   nblistw = W.Queen,
   alpha = seq(0, 2, 0.05),
   classidx = TRUE,
