@@ -55,6 +55,26 @@ build.spatial.weights <- function(hex) {
 }
 
 
+#' p-value du test de Moran sur les RÉSIDUS d'un modèle (tout type)
+#'
+#' Diagnostic uniforme appliqué aux sept modèles : reste-t-il de l'autocorrélation
+#' spatiale dans les résidus ? Pour le MCO, une valeur très faible justifie le
+#' passage aux modèles spatiaux ; pour les modèles spatiaux (SAR/SEM/Durbin), une
+#' valeur REDEVENUE ÉLEVÉE (> 0,05) confirme qu'ils ont bien absorbé la structure
+#' spatiale. On applique le test de Moran directement aux résidus (`moran.test`),
+#' ce qui fonctionne pour lm, les objets `spatialreg` et `mgcv`.
+#'
+#' @param model Modèle ajusté (lm, Sarlm, SLX, gam...).
+#' @param listw Matrice de voisinage (listw) alignée sur les résidus.
+#' @return La p-value (NA si le calcul échoue).
+residual.moran.p <- function(model, listw) {
+  tryCatch(
+    spdep::moran.test(as.numeric(residuals(model)), listw,
+                      zero.policy = TRUE, na.action = stats::na.omit)$p.value,
+    error = function(e) NA_real_)
+}
+
+
 #' Ajuster les 7 modèles du groupe 2 pour une année donnée
 #'
 #' @param data    data.frame d'UNE année : colonnes hex_id, target (ordinale),
@@ -98,13 +118,9 @@ fit.group2 <- function(data, hex, cov_names,
   # --- MCO (référence non spatiale) ---
   if ("ols" %in% models) {
     m <- lm(fml, data = data)
-    # Test de Moran sur les résidus : reste-t-il de l'autocorrélation spatiale ?
-    moran_p <- tryCatch(
-      spdep::lm.morantest(m, listw, zero.policy = TRUE)$p.value,
-      error = function(e) NA_real_)
     results$ols <- standardize.group2.result("MCO", m,
       aic = AIC(m), bic = BIC(m), r2 = summary(m)$r.squared,
-      moran_p = as.numeric(moran_p), loglik = as.numeric(logLik(m)))
+      moran_p = residual.moran.p(m, listw), loglik = as.numeric(logLik(m)))
   }
 
   # --- SLX : ajoute les covariables moyennes des voisins (lagged X) ---
@@ -155,7 +171,7 @@ fit.group2 <- function(data, hex, cov_names,
     if (!is.null(m)) {
       results$gam <- standardize.group2.result("GAM", m,
         aic = AIC(m), bic = BIC(m), r2 = summary(m)$r.sq,
-        moran_p = NA_real_, loglik = as.numeric(logLik(m)))
+        moran_p = residual.moran.p(m, listw), loglik = as.numeric(logLik(m)))
     } else {
       results$gam <- standardize.group2.result("GAM", NULL)
     }
@@ -220,5 +236,6 @@ safe.result <- function(name, model, listw) {
   }, error = function(e) NA_real_))
 
   standardize.group2.result(name, model, aic = aic, bic = bic, r2 = r2,
+                            moran_p = residual.moran.p(model, listw),
                             rho = rho, lambda = lambda, loglik = ll)
 }
