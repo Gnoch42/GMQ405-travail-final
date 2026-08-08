@@ -105,7 +105,7 @@ weighted.mode <- function(x, w = rep(1, length(x))) {
 #' @param cellsize   Taille de la cellule, exprimée dans les UNITÉS DU CRS cible
 #'                   (voir target_crs). Avec un CRS projeté en mètres, cellsize
 #'                   correspond à la distance entre deux côtés opposés de
-#'                   l'hexagone (ex. 10000 = hexagones d'environ 10 km).
+#'                   l'hexagone (ex. 5000 = hexagones d'environ 5 km).
 #' @param target_crs (Optionnel) CRS projeté cible (code EPSG ou objet crs).
 #'                   IMPORTANT : la grille DOIT être construite dans un CRS
 #'                   projeté (en mètres) pour que `cellsize` ait un sens métrique.
