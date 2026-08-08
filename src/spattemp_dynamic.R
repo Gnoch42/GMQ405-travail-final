@@ -83,8 +83,8 @@ compute.group.means <- function(data, grouping.fields, mean.fields, cfg) {
   
   for (field in mean.fields) {
     for (group in grouping.fields) {
-      wheights <- ifelse(data[[group]] > cfg$geocmeans$group_mean_thr, data[[group]], 0)
-      mean <- weighted.mean(data[[field]], wheights)
+      weights <- ifelse(data[[group]] > cfg$geocmeans$group_mean_thr, data[[group]], 0)
+      mean <- weighted.mean(data[[field]], weights)
       output[field, group] <- mean
     }
   }
