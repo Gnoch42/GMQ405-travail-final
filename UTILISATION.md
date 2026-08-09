@@ -204,7 +204,7 @@ project:
   target_crs: 32198        # CRS projeté (mètres). 32198 = NAD83/Québec Lambert.
 
 hex_grid:
-  cellsize: 10000          # taille de cellule EN MÈTRES (10000 = hexagones ~10 km)
+  cellsize: 5000           # taille de cellule EN MÈTRES (5000 = hexagones ~5 km)
   min_coverage: 0.25       # couverture minimale (0-1) pour qu'un hexagone reçoive une valeur
 ```
 
