@@ -1,5 +1,5 @@
 compute.historic.stats <- function(tbe, study.zone) {
-  Sup.totale.ha <- as.numeric(st_area(study.zone)) / 10000
+  Sup.totale.ha <- as.numeric(st_area(st_union(study.zone))) / 10000
   cat("Superficie totale du territoire d'étude :", round(Sup.totale.ha), "ha\n")
   
   ## 4.1 Découpage précis des polygones à la frontière du territoire d'étude----
