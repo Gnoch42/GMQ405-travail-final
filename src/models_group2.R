@@ -23,9 +23,7 @@
 #   Durbin erreur : SEM + covariables des voisins (le plus général en "erreur").
 #   GAM           : relations NON linéaires lissées (splines) entre X et cible.
 #
-# ---------------------------------------------------------------------------
-# GLOSSAIRE (pour non-spécialistes)
-# ---------------------------------------------------------------------------
+## GLOSSAIRE (pour non-spécialistes) ----------------------------------------
 # * MATRICE DE VOISINAGE / CONTIGUÏTÉ : tableau qui dit quels hexagones sont
 #   "voisins". Ici, deux hexagones sont voisins s'ils se touchent. On la
 #   normalise pour que chaque hexagone reçoive une MOYENNE de ses voisins.
@@ -183,9 +181,7 @@ fit.group2 <- function(data, hex, cov_names,
 }
 
 
-# -----------------------------------------------------------------------------
-# STANDARDISATION DE LA SORTIE (structure commune au GROUPE 2)
-# -----------------------------------------------------------------------------
+## STANDARDISATION DE LA SORTIE (structure commune au GROUPE 2) --------------
 # Toutes les métriques ci-dessous sont COMPARABLES entre les 7 modèles :
 #   - AIC / BIC : plus bas = meilleur (compromis ajustement/complexité).
 #   - pseudo-R2 : part de variance expliquée (indicatif).

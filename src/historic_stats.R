@@ -41,7 +41,8 @@ compute.historic.stats <- function(tbe, study.zone) {
   TableauFinal <- arrange(TableauFinal, ANNEE)
   
   ## 4.8 Export du tableau en CSV ----
-  write.csv(TableauFinal, "data/output/resultats_ampleur_tbe_2014_2025.csv", row.names = FALSE)
+  dir.create("outputs/ampleur", recursive = TRUE, showWarnings = FALSE)
+  write.csv(TableauFinal, "outputs/ampleur/ampleur_tbe_2014_2025.csv", row.names = FALSE)
   
   return(TableauFinal)
 }

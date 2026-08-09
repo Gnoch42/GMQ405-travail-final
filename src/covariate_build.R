@@ -33,9 +33,7 @@ source("src/features.R")
 `%||%` <- function(a, b) if (is.null(a)) b else a
 
 
-# -----------------------------------------------------------------------------
-# OUTILS ÉCOFORESTIERS
-# -----------------------------------------------------------------------------
+## OUTILS ÉCOFORESTIERS -----------------------------------------------------
 
 #' Charger les peuplements + essences découpés (tous feuillets de la zone)
 load.ecoforest <- function(cfg) {
@@ -78,9 +76,7 @@ parse.age.class <- function(codes, age_ji = 30, age_vi = 90) {
 }
 
 
-# -----------------------------------------------------------------------------
-# CONSTRUCTEURS DE COVARIABLES
-# -----------------------------------------------------------------------------
+## CONSTRUCTEURS DE COVARIABLES ----------------------------------------------
 # Chaque constructeur renvoie un data.frame :
 #   - statique : colonnes (hex_id, <nom>)
 #   - annuelle : colonnes (hex_id, year, <nom>)
@@ -247,9 +243,7 @@ reshape.severity.wide <- function(target_panel) {
 }
 
 
-# -----------------------------------------------------------------------------
-# ASSEMBLAGE DU PANEL + CACHE
-# -----------------------------------------------------------------------------
+## ASSEMBLAGE DU PANEL + CACHE -----------------------------------------------
 
 #' Construire le panel hex×année complet et l'écrire en cache
 #'

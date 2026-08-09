@@ -18,9 +18,7 @@
 #                        (Nécessite keras3/torch + rasterisation ; fourni en
 #                        SQUELETTE, voir la garde plus bas.)
 #
-# ---------------------------------------------------------------------------
-# POINT MÉTHODOLOGIQUE CENTRAL : le DÉCOUPAGE TEMPOREL (jamais aléatoire)
-# ---------------------------------------------------------------------------
+## POINT MÉTHODOLOGIQUE CENTRAL : le DÉCOUPAGE TEMPOREL (jamais aléatoire) ----
 # On prédit le futur : l'entraînement, la validation et le test doivent donc
 # être séparés DANS LE TEMPS (blocs d'années consécutives). Un découpage
 # aléatoire mélangerait passé et futur et surestimerait gravement la performance.
@@ -32,9 +30,7 @@
 library(sf)
 
 
-# -----------------------------------------------------------------------------
-# DÉCOUPAGE TEMPOREL
-# -----------------------------------------------------------------------------
+## DÉCOUPAGE TEMPOREL -------------------------------------------------------
 
 #' Séparer les paires (t -> t+1) en entraînement / validation / test par années
 #'
@@ -53,9 +49,7 @@ temporal.split <- function(pairs, split) {
 }
 
 
-# -----------------------------------------------------------------------------
-# CONSTRUCTION DES PAIRES DE TRANSITION (t -> t+1)
-# -----------------------------------------------------------------------------
+## CONSTRUCTION DES PAIRES DE TRANSITION (t -> t+1) --------------------------
 
 #' Construire les paires hexagone (année t, année t+1) avec voisinage
 #'
@@ -109,9 +103,7 @@ build.transition.pairs <- function(panel, hex, cov_names) {
 }
 
 
-# -----------------------------------------------------------------------------
-# INTERFACES DE PRÉDICTION PURES
-# -----------------------------------------------------------------------------
+## INTERFACES DE PRÉDICTION PURES -------------------------------------------
 # Chaque fonction prend un jeu d'ENTRAÎNEMENT et un jeu de TEST (data.frames de
 # paires produits par build.transition.pairs) et renvoie un vecteur d'états
 # prédits (entiers 0..k) aligné sur les lignes du test, ou NULL si le modèle ne
@@ -144,9 +136,7 @@ rf.predict <- function(train, test, cov_names, n_states, engine = "ranger") {
 convlstm.predict <- function(train, test, n_states) NULL
 
 
-# -----------------------------------------------------------------------------
-# MODÈLE 1 — MARKOV SPATIAL (CA-Markov)
-# -----------------------------------------------------------------------------
+## MODÈLE 1 — MARKOV SPATIAL (CA-Markov) ----------------------------------
 
 #' Ajuster une matrice de transition de Markov et prédire t+1
 #'
@@ -178,9 +168,7 @@ fit.markov <- function(splits, n_states) {
 }
 
 
-# -----------------------------------------------------------------------------
-# MODÈLE 2 — RANDOM FOREST / XGBOOST
-# -----------------------------------------------------------------------------
+## MODÈLE 2 — RANDOM FOREST / XGBOOST -------------------------------------
 
 #' Ajuster un Random Forest (ou XGBoost) pour prédire l'état t+1
 #'
@@ -212,9 +200,7 @@ fit.rf <- function(splits, cov_names, n_states, engine = "ranger") {
 }
 
 
-# -----------------------------------------------------------------------------
-# MODÈLE 3 — ConvLSTM (SQUELETTE)
-# -----------------------------------------------------------------------------
+## MODÈLE 3 — ConvLSTM (SQUELETTE) ----------------------------------------
 
 #' Ajuster le ConvLSTM et prédire l'état t+1
 #'
@@ -238,9 +224,7 @@ fit.convlstm <- function(splits, n_states, hex = NULL, cov_names = character(0),
 }
 
 
-# -----------------------------------------------------------------------------
-# STANDARDISATION DE LA SORTIE (structure commune au GROUPE 1)
-# -----------------------------------------------------------------------------
+## STANDARDISATION DE LA SORTIE (structure commune au GROUPE 1) --------------
 # Métriques adaptées à une cible ORDINALE, comparables entre les 3 modèles :
 #   - accuracy       : proportion d'hexagones dont la classe est exactement bonne.
 #   - kappa_pondere  : accord observé/attendu au-delà du hasard, PÉNALISANT

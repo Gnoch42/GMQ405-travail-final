@@ -18,6 +18,11 @@ extraction:
     field: 'MRS_NM_MRC'
     regions: ['La Matanie', 'La Matapédia']
 
+  GRHQ:                          # réseau hydrographique (pour retirer le fleuve)
+    inpath: "data/GRHQ"          # dossier des fichiers GRHQ
+    outpath: "data/output/st_laurent.gpkg"
+    force_extraction: FALSE
+
 hex_grid:
   cellsize: 5000        # Taille de cellule en mètres (5000 = hexagones de 5 km ; adapté à 2 MRC)
   min_coverage: 0.25    # Couverture minimale d'un hexagone pour recevoir une valeur (0-1)
@@ -39,6 +44,7 @@ study_zone:
   layer: "mrc_s"
   field: "MRS_NM_MRC"
   regions: ["La Matanie", "La Matapédia"]
+  remove: "data/output/st_laurent.gpkg"   # géométrie à soustraire (fleuve St-Laurent)
 
 # --- Variable cible (intensité TBE) ---
 target:
@@ -160,9 +166,23 @@ models:
     year_t: 2021
     run: ["ols", "slx", "sar", "sem", "durbin", "durbin_error", "gam"]
 
-# --- Sorties ---
+# --- Analyse de dynamique spatiale (LISA + geo-c-means) ---
+lisa_analysis:
+  start: 2014            # première année analysée
+  end:   2025            # dernière année analysée
+  alpha: 0.05            # seuil de significativité du I de Moran local
+
+geocmeans:
+  k: 4                   # nombre de classes (typologie temporelle)
+  m: 1.6                 # paramètre de flou (optimisé)
+  alpha: 0.6             # poids de la composante spatiale (optimisé)
+  group_mean_thr: 0.25   # seuil d'appartenance pour l'agrégation par groupe
+
+# --- Sorties : racine unique, subdivisée par étape ---
+# Sous-dossiers créés automatiquement sous `root` :
+#   ampleur/  dynamique/  covariables/  economie/  prediction/  cartes/
 output:
-  dir: "data/output/models"
+  root: "outputs"
 
 # --- Évaluation comparative des modèles (src/model_evaluation.R) ---
 # CV par blocs spatiaux (généralisation dans l'espace) + test temporel sur la
@@ -173,7 +193,7 @@ evaluation:
   n_spatial_blocks: 4          # nombre de blocs spatiaux contigus (3 à 5)
   train_years: [2014, 2021]    # cycle(s) d'entraînement
   test_years:  [2023, 2024]    # phase de déclin réservée (test temporel)
-  outdir: "data/output/evaluation"
+  outdir: "outputs/prediction"
 
 # --- ConvLSTM (réseau spatio-temporel, groupe 1) ---
 # Nécessite le backend torch : torch::install_torch() (téléchargement unique).

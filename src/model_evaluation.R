@@ -22,22 +22,19 @@
 # =============================================================================
 
 library(sf)
-library(ggplot2)
 
 source("src/hex_grid.R")
 source("src/features.R")
 source("src/models_group1.R")   # interfaces markov.predict / rf.predict / convlstm.predict
+source("src/visualisation.R")   # graphiques (confusion, kappa, rappel) + ETATS_TBE
 try(source("src/model_convlstm.R"), silent = TRUE)   # ConvLSTM (torch), si disponible
 
 `%||%` <- function(a, b) if (is.null(a)) b else a
 
-# Libellés des 4 états ordonnés (index 0..3).
-ETATS_TBE <- c("Absence", "Légère", "Modérée", "Sévère")
+# ETATS_TBE (libellés des 4 états ordonnés) est défini dans src/visualisation.R.
 
 
-# =============================================================================
-# MÉTRIQUES ÉLÉMENTAIRES (appelables avec obs + pred)
-# =============================================================================
+# MÉTRIQUES ÉLÉMENTAIRES (appelables avec obs + pred) ---------------------
 
 #' Matrice de confusion : comptes bruts + version normalisée par ligne (%)
 #'
@@ -155,9 +152,7 @@ evaluate.predictions <- function(obs, pred, n_states, model_name, pontius = FALS
 }
 
 
-# =============================================================================
-# DÉCOUPAGE SPATIAL EN BLOCS CONTIGUS
-# =============================================================================
+# DÉCOUPAGE SPATIAL EN BLOCS CONTIGUS ---------------------------------------
 
 #' Partitionner les hexagones en k blocs spatiaux CONTIGUS
 #'
@@ -177,9 +172,7 @@ make.spatial.blocks <- function(hex, k = 4, seed = 1) {
 }
 
 
-# =============================================================================
-# VALIDATION CROISÉE SPATIO-TEMPORELLE
-# =============================================================================
+# VALIDATION CROISÉE SPATIO-TEMPORELLE --------------------------------------
 
 #' Registre des modèles à évaluer (interfaces de prédiction communes)
 #'
@@ -215,7 +208,7 @@ build.model.registry <- function(cov_names, n_states, hex = NULL, cfg = NULL) {
 #' @return Liste : $summary (tableau récap), $per_block, $confusions, $class, $pontius.
 spatiotemporal.evaluation <- function(pairs, hex, cov_names, n_states,
                                       train_years, test_years, n_blocks = 4,
-                                      outdir = "data/output/evaluation",
+                                      outdir = "outputs/prediction",
                                       labels = ETATS_TBE, cfg = NULL) {
   dir.create(outdir, recursive = TRUE, showWarnings = FALSE)
   models <- build.model.registry(cov_names, n_states, hex, cfg)
@@ -294,88 +287,14 @@ spatiotemporal.evaluation <- function(pairs, hex, cov_names, n_states,
 }
 
 
-#' Sauvegarder une matrice de confusion en table CSV + image (heatmap)
-save.confusion <- function(cm, model_name, outdir) {
-  slug <- gsub("[^A-Za-z0-9]+", "_", tolower(model_name))
-  write.csv(as.data.frame.matrix(cm$counts),
-            file.path(outdir, paste0("confusion_", slug, ".csv")))
-
-  df <- as.data.frame(cm$row_pct)
-  names(df) <- c("Observe", "Predit", "pct")
-  df$compte <- as.data.frame(cm$counts)$Freq
-  p <- ggplot(df, aes(Predit, Observe, fill = pct)) +
-    geom_tile(color = "white") +
-    geom_text(aes(label = paste0(compte, "\n", pct, "%")), size = 3) +
-    scale_fill_gradient(low = "#f7fbff", high = "#08519c", limits = c(0, 100)) +
-    scale_y_discrete(limits = rev) +
-    labs(title = paste("Matrice de confusion —", model_name),
-         subtitle = "ligne = observé, colonne = prédit ; % normalisé par ligne (rappel en diagonale)",
-         fill = "% ligne") +
-    theme_minimal(base_size = 11)
-  ggsave(file.path(outdir, paste0("confusion_", slug, ".png")), p,
-         width = 6.5, height = 5.5, dpi = 120)
-}
 
 
-#' Graphique de comparaison du KAPPA PONDÉRÉ entre modèles
-#'
-#' Barres groupées : kappa en validation croisée spatiale (moyenne ± écart-type
-#' sur les blocs) et kappa au test temporel (phase de déclin). Métrique principale
-#' de comparaison des modèles.
-plot.kappa.comparison <- function(summary_tab, outdir) {
-  df <- rbind(
-    data.frame(modele = summary_tab$modele, type = "CV spatiale",
-               kappa = summary_tab$kappa_spatial_moy, sd = summary_tab$kappa_spatial_sd),
-    data.frame(modele = summary_tab$modele, type = "Test temporel",
-               kappa = summary_tab$kappa_temporel, sd = NA_real_))
-  df$modele <- factor(df$modele, levels = summary_tab$modele)
-  p <- ggplot(df, aes(modele, kappa, fill = type)) +
-    geom_col(position = position_dodge(0.8), width = 0.7, na.rm = TRUE) +
-    geom_errorbar(aes(ymin = kappa - sd, ymax = kappa + sd),
-                  position = position_dodge(0.8), width = 0.2, na.rm = TRUE) +
-    geom_hline(yintercept = 0, color = "grey40") +
-    geom_text(aes(label = ifelse(is.na(kappa), "n/d", sprintf("%.2f", kappa))),
-              position = position_dodge(0.8), vjust = -0.5, size = 3, na.rm = TRUE) +
-    scale_fill_manual(values = c("CV spatiale" = "#6baed6", "Test temporel" = "#08519c")) +
-    labs(title = "Kappa pondéré par modèle",
-         subtitle = "CV spatiale (moyenne ± écart-type sur blocs) vs test temporel (phase de déclin)",
-         x = NULL, y = "Kappa pondéré (quadratique)", fill = NULL) +
-    theme_minimal(base_size = 12) + theme(legend.position = "top")
-  ggsave(file.path(outdir, "kappa_comparaison.png"), p, width = 7.5, height = 5, dpi = 120)
-}
-
-
-#' Graphique du RAPPEL PAR CLASSE (détection des classes rares)
-#'
-#' Complète les matrices de confusion : montre, pour chaque modèle, la part des
-#' cas réels de chaque état correctement détectés. Met en évidence les modèles
-#' qui « ratent » les classes rares (Modéré/Grave).
-plot.class.recall <- function(class_tab, outdir, labels = ETATS_TBE) {
-  df <- class_tab
-  df$classe <- factor(df$classe, levels = labels)
-  df$modele <- factor(df$modele, levels = unique(df$modele))
-  p <- ggplot(df, aes(classe, rappel, fill = modele)) +
-    geom_col(position = position_dodge(0.8), width = 0.7, na.rm = TRUE) +
-    geom_text(aes(label = ifelse(is.na(rappel), "0", sprintf("%.2f", rappel))),
-              position = position_dodge(0.8), vjust = -0.4, size = 2.8, na.rm = TRUE) +
-    scale_fill_brewer(palette = "Set2") +
-    ylim(0, 1) +
-    labs(title = "Rappel par classe d'intensité (test temporel)",
-         subtitle = "Part des cas réels de chaque état correctement prédits (1 = parfait)",
-         x = NULL, y = "Rappel", fill = NULL) +
-    theme_minimal(base_size = 12) + theme(legend.position = "top")
-  ggsave(file.path(outdir, "rappel_par_classe.png"), p, width = 8, height = 5, dpi = 120)
-}
-
-
-# =============================================================================
-# CARTOGRAPHIE DES RÉSULTATS ET DE L'ERREUR SUR LE TERRITOIRE
-# =============================================================================
+# CARTOGRAPHIE DES RÉSULTATS ET DE L'ERREUR SUR LE TERRITOIRE ---------------
 
 #' Cartographier, sur la grille hexagonale, l'observé / le prédit / l'erreur
 #'
 #' Pour une année de test donnée et un ou plusieurs modèles, produit (via les
-#' fonctions de src/viz_tmap.R) :
+#' fonctions de src/visualisation.R) :
 #'   - la carte de l'intensité OBSERVÉE ;
 #'   - la carte de l'intensité PRÉDITE par le modèle ;
 #'   - la carte de l'ERREUR (sous-estimation / correct / surestimation) ;
@@ -388,8 +307,7 @@ plot.class.recall <- function(class_tab, outdir, labels = ETATS_TBE) {
 map.territory.results <- function(config_path = "config.yaml",
                                   models = c("Markov spatial", "ConvLSTM"),
                                   year_t = NULL,
-                                  outdir = "data/output/evaluation/cartes") {
-  source("src/viz_tmap.R")
+                                  outdir = "outputs/cartes") {
   dir.create(outdir, recursive = TRUE, showWarnings = FALSE)
   cfg <- yaml::read_yaml(config_path)
   cache <- load.covariate.panel(cfg)
@@ -457,9 +375,7 @@ map.territory.results <- function(config_path = "config.yaml",
 }
 
 
-# =============================================================================
-# POINT D'ENTRÉE : évaluation depuis le cache de covariables
-# =============================================================================
+# POINT D'ENTRÉE : évaluation depuis le cache de covariables ---------------
 
 #' Lancer l'évaluation complète à partir du panel en cache + config
 run.model.evaluation <- function(config_path = "config.yaml") {
@@ -482,7 +398,7 @@ run.model.evaluation <- function(config_path = "config.yaml") {
   train_y <- ev_cfg$train_years %||% split$train_years
   test_y  <- ev_cfg$test_years  %||% split$test_years
   n_blocks <- ev_cfg$n_spatial_blocks %||% 4
-  outdir  <- ev_cfg$outdir %||% "data/output/evaluation"
+  outdir  <- ev_cfg$outdir %||% "outputs/prediction"
 
   # Libellés d'états issus des données réelles (Aucun/Léger/Modéré/Grave).
   labels <- levels(panel$target)

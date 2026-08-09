@@ -47,9 +47,7 @@ robust.download <- function(url, dest) {
 }
 
 
-# -----------------------------------------------------------------------------
-# 1. ÉCOFORESTIÈRE — feuillets intersectant la zone
-# -----------------------------------------------------------------------------
+## 1. ÉCOFORESTIÈRE — feuillets intersectant la zone ---------------------
 
 #' Télécharger et découper les feuillets écoforestiers de la zone d'étude
 #'
@@ -151,9 +149,7 @@ clip.ecoforest.tile <- function(raw_gpkg, zone, eco, clip_gpkg, tile) {
 }
 
 
-# -----------------------------------------------------------------------------
-# 2. CLIMAT RSCQ — fichiers NetCDF par année
-# -----------------------------------------------------------------------------
+## 2. CLIMAT RSCQ — fichiers NetCDF par année -----------------------------
 
 #' Télécharger les NetCDF climatiques pour un paramètre et des années données
 #'
@@ -188,9 +184,7 @@ download.climate.files <- function(cfg, parameter, years) {
 }
 
 
-# -----------------------------------------------------------------------------
-# ORCHESTRATION
-# -----------------------------------------------------------------------------
+## ORCHESTRATION -------------------------------------------------------------
 
 #' Télécharger toutes les sources nécessaires selon la config
 main.download <- function(config_path = "config.yaml") {

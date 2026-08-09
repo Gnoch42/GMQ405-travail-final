@@ -16,9 +16,7 @@
 #   3. Détecte la COLINÉARITÉ entre covariables (redondance d'information).
 #   4. Produit un TABLEAU classé + des GRAPHIQUES pour la décision.
 #
-# ---------------------------------------------------------------------------
-# RAPPEL PÉDAGOGIQUE — les tests utilisés (pour non-spécialistes)
-# ---------------------------------------------------------------------------
+## RAPPEL PÉDAGOGIQUE — les tests utilisés (pour non-spécialistes) ------
 # * Corrélation de SPEARMAN (rho) : mesure si deux variables évoluent dans le
 #   même sens, en se basant sur les RANGS (1er, 2e, 3e...) et non les valeurs
 #   brutes. Vaut entre -1 et +1. |rho| proche de 1 = association forte. On
@@ -43,17 +41,16 @@
 # =============================================================================
 
 library(sf)
-library(ggplot2)
 library(yaml)
 
-# On réutilise la logique d'agrégation spatiale (tâche 2) et l'assemblage.
+# On réutilise la logique d'agrégation spatiale et l'assemblage, et le fichier
+# central des graphiques (plot.ranking, plot.collinearity, thème/palettes).
 source("src/hex_grid.R")
 source("src/features.R")
+source("src/visualisation.R")
 
 
-# -----------------------------------------------------------------------------
-# MESURES D'ASSOCIATION ÉLÉMENTAIRES
-# -----------------------------------------------------------------------------
+## MESURES D'ASSOCIATION ÉLÉMENTAIRES --------------------------------------
 
 #' V de Cramér entre deux variables catégorielles
 #'
@@ -102,9 +99,7 @@ associate.covariate <- function(cov_vals, target_rank, target_fac, value_type) {
 }
 
 
-# -----------------------------------------------------------------------------
-# FONCTION PRINCIPALE
-# -----------------------------------------------------------------------------
+## FONCTION PRINCIPALE -------------------------------------------------------
 
 #' Évaluer un jeu de covariables candidates
 #'
@@ -120,7 +115,7 @@ associate.covariate <- function(cov_vals, target_rank, target_fac, value_type) {
 #'   $vif (data.frame), $table (données hexagonales assemblées).
 evaluate.covariates <- function(hex, target_sf, target_cfg, covariates,
                                 year, min_coverage = 0.25,
-                                outdir = "data/output/covariate_eval") {
+                                outdir = "outputs/covariables") {
 
   dir.create(outdir, recursive = TRUE, showWarnings = FALSE)
   message("== Évaluation des covariables (année de référence : ", year, ") ==")
@@ -200,7 +195,7 @@ rank.report.covariates <- function(hex_tab, target_fac, types, cov_names, outdir
 #' @param year Année de référence (défaut : dernière année disponible).
 #' @param outdir Dossier de sortie.
 evaluate.from.cache <- function(config_path = "config.yaml", year = NULL,
-                                outdir = "data/output/covariate_eval") {
+                                outdir = "outputs/covariables") {
   cfg <- read_yaml(config_path)
   cache <- load.covariate.panel(cfg)
   if (is.null(cache)) stop("Aucun cache de covariables : lancez d'abord src/covariate_build.R")
@@ -219,9 +214,7 @@ evaluate.from.cache <- function(config_path = "config.yaml", year = NULL,
 }
 
 
-# -----------------------------------------------------------------------------
-# UTILITAIRES DE SORTIE
-# -----------------------------------------------------------------------------
+## UTILITAIRES DE SORTIE -----------------------------------------------------
 
 #' Traduire une force d'association [0,1] en libellé lisible.
 interpret.strength <- function(s) {
@@ -252,38 +245,13 @@ compute.vif <- function(df) {
 }
 
 
-#' Graphique en barres du classement des covariables.
-plot.ranking <- function(ranking, outdir) {
-  ranking$covariable <- factor(ranking$covariable, levels = rev(ranking$covariable))
-  p <- ggplot(ranking, aes(x = covariable, y = force, fill = type)) +
-    geom_col() +
-    coord_flip() +
-    labs(title = "Force d'association avec l'intensité TBE",
-         subtitle = "Spearman |rho| (continu) ou V de Cramér (catégoriel), 0 = nul, 1 = fort",
-         x = NULL, y = "Force d'association [0-1]") +
-    theme_minimal(base_size = 12)
-  ggsave(file.path(outdir, "classement_covariables.png"), p,
-         width = 8, height = 5, dpi = 120)
-}
+# Les graphiques (plot.ranking, plot.collinearity) sont définis dans
+# src/visualisation.R afin que tous les visuels partagent le même style.
 
 
-#' Heatmap de colinéarité entre covariables continues (corrplot).
-plot.collinearity <- function(cor_mat, outdir) {
-  if (!requireNamespace("corrplot", quietly = TRUE)) return(invisible())
-  png(file.path(outdir, "colinearite_covariables.png"), width = 700, height = 700)
-  corrplot::corrplot(cor_mat, method = "color", type = "upper",
-                     addCoef.col = "black", tl.col = "black",
-                     title = "Colinéarité (Spearman) entre covariables continues",
-                     mar = c(0, 0, 2, 0))
-  dev.off()
-}
-
-
-# -----------------------------------------------------------------------------
-# DÉMONSTRATION sur données SIMULÉES
-# -----------------------------------------------------------------------------
+## DÉMONSTRATION sur données SIMULÉES -------------------------------------
 # Permet de lancer l'outil immédiatement :  Rscript src/covariate_evaluation.R
-# Génère un jeu factice, l'évalue, et écrit les sorties dans data/output/.
+# Génère un jeu factice, l'évalue, et écrit les sorties dans outputs/covariables/.
 demo.covariate.evaluation <- function() {
   source("src/simulate_data.R")
   sim <- simulate.tbe.dataset(seed = 42, n_years = 8, extent_km = 200)
@@ -297,7 +265,7 @@ demo.covariate.evaluation <- function() {
   evaluate.covariates(
     hex = hex, target_sf = sim$tbe, target_cfg = target_cfg,
     covariates = sim$covariates, year = 2019, min_coverage = 0.25,
-    outdir = "data/output/covariate_eval"
+    outdir = "outputs/covariables"
   )
 }
 

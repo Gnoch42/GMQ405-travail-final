@@ -37,9 +37,7 @@ library(sf)
 `%||%` <- function(a, b) if (is.null(a)) b else a
 
 
-# -----------------------------------------------------------------------------
-# ARCHITECTURE (torch)
-# -----------------------------------------------------------------------------
+## ARCHITECTURE (torch) ------------------------------------------------------
 
 #' Cellule ConvLSTM : un LSTM dont les portes sont des convolutions 2D
 #'
@@ -82,9 +80,7 @@ convlstm_net <- nn_module("convlstm_net",
 )
 
 
-# -----------------------------------------------------------------------------
-# RASTÉRISATION : paires (hexagone × année) -> images régulières
-# -----------------------------------------------------------------------------
+## RASTÉRISATION : paires (hexagone × année) -> images régulières -------
 
 #' Reconstituer la sévérité par hexagone et par année depuis les paires
 #'
@@ -135,9 +131,7 @@ hexvals.to.image <- function(vals_by_hex, rt, fill = 0) {
 }
 
 
-# -----------------------------------------------------------------------------
-# ENTRAÎNEMENT + PRÉDICTION
-# -----------------------------------------------------------------------------
+## ENTRAÎNEMENT + PRÉDICTION -----------------------------------------------
 
 #' Prédiction ConvLSTM complète (interface utilisée par le pipeline et l'éval.)
 #'

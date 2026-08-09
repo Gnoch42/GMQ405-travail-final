@@ -7,6 +7,9 @@
 config.yaml
 data/*
 
+# Sorties régénérables (cartes, tableaux, graphiques)
+outputs/
+
 # Fichiers secrets macOS
 .DS_Store
 .AppleDouble

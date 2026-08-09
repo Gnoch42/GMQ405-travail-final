@@ -28,9 +28,7 @@ library(sf)
 library(terra)
 
 
-# -----------------------------------------------------------------------------
-# HELPERS D'AGRÉGATION PONDÉRÉE
-# -----------------------------------------------------------------------------
+## HELPERS D'AGRÉGATION PONDÉRÉE ------------------------------------------
 # Ces deux fonctions résument un ensemble de valeurs en UNE seule valeur pour
 # un hexagone, en tenant compte du POIDS de chaque valeur (surface d'intersection
 # pour les polygones, fraction de cellule couverte pour les rasters).
@@ -93,9 +91,7 @@ weighted.mode <- function(x, w = rep(1, length(x))) {
 }
 
 
-# -----------------------------------------------------------------------------
-# 1. CRÉATION DE LA GRILLE HEXAGONALE
-# -----------------------------------------------------------------------------
+## 1. CRÉATION DE LA GRILLE HEXAGONALE --------------------------------------
 
 #' Créer une grille hexagonale couvrant une zone d'étude
 #'
@@ -155,9 +151,7 @@ create.hex.grid <- function(zone, cellsize, target_crs = 32198) {
 }
 
 
-# -----------------------------------------------------------------------------
-# 2. AGRÉGATION D'UNE SOURCE (VECTEUR OU RASTER) SUR LA GRILLE
-# -----------------------------------------------------------------------------
+## 2. AGRÉGATION D'UNE SOURCE (VECTEUR OU RASTER) SUR LA GRILLE -------------
 
 #' Assigner une valeur à chaque hexagone à partir d'une source quelconque
 #'
@@ -305,9 +299,7 @@ aggregate.to.hex <- function(hex, source, value_field = NULL,
 }
 
 
-# -----------------------------------------------------------------------------
-# Petit utilitaire : comparaison de CRS entre un raster terra et un objet sf.
-# -----------------------------------------------------------------------------
+## Petit utilitaire : comparaison de CRS entre un raster terra et un objet sf. ----
 crs.matches <- function(rast, hex) {
   isTRUE(try(terra::same.crs(rast, paste0("EPSG:", st_crs(hex)$epsg)), silent = TRUE))
 }

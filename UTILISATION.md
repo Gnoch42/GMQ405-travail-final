@@ -33,21 +33,32 @@ d'origine (polygones ou rasters).
 
 ```
 config.yaml               Tous les paramètres (le SEUL fichier à éditer au quotidien)
-mod_spa_temp.R            Programme principal : orchestre les 2 groupes de modèles
+main.R                    PROGRAMME PRINCIPAL : déroule toute la méthodologie
+                          (extraction -> ampleur -> dynamique -> modélisation)
 src/
+├── data_extraction.R     Extraction TBE / fleuve pour la zone d'étude
+├── structuration.R       Construction de la grille + conversion des niveaux
+├── historic_stats.R      Statistiques d'ampleur annuelles
+├── spattemp_dynamic.R    Dynamique spatiale (LISA, matrices de voisinage, geocmeans)
 ├── hex_grid.R            Grille hexagonale + agrégation spatiale générique
 ├── features.R            Assemblage cible + covariables + chargement du cache
-├── models_group1.R       Modèles de prédiction t+1 (+ interfaces de prédiction)
-├── models_group2.R       Modèles d'analyse à un instant t
-├── model_evaluation.R    Évaluation comparative + validation croisée spatio-temporelle
-├── model_convlstm.R      ConvLSTM (réseau spatio-temporel, torch)
-├── viz_tmap.R            Fonctions de cartographie réutilisables (tmap)
-├── covariate_evaluation.R  OUTIL AUTONOME de sélection des covariables
 ├── covariate_download.R  Téléchargement ciblé des sources (écoforestier, climat)
-├── covariate_build.R     Calcul des 5 covariables -> panel hex×année en cache
-├── simulate_data.R       Générateur de données factices (démo)
-└── data_extraction.R     Extraction des données réelles (existant)
+├── covariate_build.R     Calcul des covariables -> panel hex×année en cache
+├── covariate_evaluation.R  OUTIL AUTONOME de sélection des covariables
+├── modelisation.R        Orchestration de la modélisation (groupe 1 + groupe 2)
+├── models_group1.R       Modèles de prédiction t+1 (Markov, RF, ConvLSTM)
+├── models_group2.R       Modèles d'analyse à un instant t (MCO..Durbin, GAM)
+├── model_convlstm.R      ConvLSTM (réseau spatio-temporel, torch)
+├── model_evaluation.R    Évaluation comparative + validation croisée spatio-temporelle
+├── visualisation.R       TOUS les graphiques et cartes (palette + thèmes unifiés)
+└── simulate_data.R       Générateur de données factices (démo)
 ```
+
+> **Point d'entrée unique** : `main.R` enchaîne toutes les étapes. Chaque étape
+> peut aussi être lancée seule (ex. `Rscript src/modelisation.R` pour la seule
+> modélisation, `Rscript src/covariate_evaluation.R` pour l'évaluation des
+> covariables). Toutes les sorties sont écrites sous **`outputs/`**, subdivisé
+> par étape : `ampleur/ dynamique/ covariables/ economie/ prediction/ cartes/`.
 
 ---
 
@@ -85,11 +96,11 @@ génère un jeu factice réaliste (un foyer d'infestation qui se déplace et gro
 d'année en année) pour que tout soit testable immédiatement.
 
 ```bash
-Rscript mod_spa_temp.R
+Rscript src/modelisation.R
 ```
 
 Vous obtenez deux tableaux de comparaison, un par groupe, écrits dans
-`data/output/models/` :
+`outputs/economie/` et `outputs/prediction/` :
 
 - `comparaison_groupe1.csv`
 - `comparaison_groupe2.csv`
@@ -100,7 +111,7 @@ Et pour tester l'outil de sélection des covariables :
 Rscript src/covariate_evaluation.R
 ```
 
-qui écrit un classement et des graphiques dans `data/output/covariate_eval/`.
+qui écrit un classement et des graphiques dans `outputs/covariables/`.
 
 ---
 
@@ -258,7 +269,7 @@ Rscript src/covariate_build.R      # 2) calcule les covariables -> cache
   (`data/covariates/panel_hex.rds` + `.gpkg`) contenant, pour chaque hexagone et
   chaque année, la cible TBE et les cinq covariables. Ce cache est ensuite lu
   **sans recalcul** par l'outil d'évaluation (`evaluate.from.cache()`) ET par
-  `mod_spa_temp` — le calcul lourd n'est donc fait qu'une seule fois.
+  la modélisation (`src/modelisation.R`) — le calcul lourd n'est fait qu'une fois.
 
 Les cinq covariables (définies dans `covariates_build:` du YAML) :
 
@@ -302,7 +313,7 @@ infestée par défaut. Sans cache, il retombe sur la démo simulée. Pour un usa
 programmatique, `evaluate.covariates()` accepte aussi une grille et des
 covariables fournies à la main (voir `demo.covariate.evaluation()`).
 
-**Ce qu'il produit** (`data/output/covariate_eval/`) :
+**Ce qu'il produit** (`outputs/covariables/`) :
 
 - `classement_covariables.csv` : chaque covariable avec sa **force
   d'association** (0 = aucun lien, 1 = lien fort) avec l'intensité TBE, le test
@@ -399,7 +410,7 @@ Rscript src/model_evaluation.R
 > plusieurs cycles complets). Renseignez `evaluation.train_years` /
 > `evaluation.test_years` pour désigner vous-même la phase de déclin pertinente.
 
-**Métriques produites** (`data/output/evaluation/`) :
+**Métriques produites** (`outputs/prediction/`) :
 
 | Sortie | Contenu |
 |---|---|
@@ -415,19 +426,19 @@ Rscript src/model_evaluation.R
   au bon *endroit* ?). Un bon `k_quantity` mais un mauvais `k_location` signale un
   modèle qui « compte » juste mais « localise » mal.
 
-## 8. Cartographie (`src/viz_tmap.R`)
+## 8. Cartographie (`src/visualisation.R`)
 
 Deux fonctions réutilisables, au **style uniforme** (même palette, typographie et
 légende), applicables à n'importe quel objet `sf` du projet :
 
 ```r
-source("src/viz_tmap.R")
+source("src/visualisation.R")
 # 1) Variable brute sur la grille hexagonale (continue ou catégorielle) :
 plot_donnees_brutes(hex, "prop_hote", titre = "Essences hôtes",
-                    export = "data/output/viz/hote.png")
+                    export = "outputs/cartes/hote.png")
 # 2) Lissage gaussien -> surface raster continue (gradients lisibles) :
 plot_flou_gaussien(hex, "prop_hote", sigma = 3000, resolution = 250,
-                   export = "data/output/viz/hote_flou.png")
+                   export = "outputs/cartes/hote_flou.png")
 ```
 
 - **`plot_donnees_brutes()`** détecte le type de variable : les états TBE
@@ -437,7 +448,7 @@ plot_flou_gaussien(hex, "prop_hote", sigma = 3000, resolution = 250,
   `sigma` (en mètres) : utile pour visualiser un gradient de pression
   d'infestation ou de risque sans l'effet « mosaïque » des hexagones.
 - `export = NULL` affiche seulement ; un chemin (`.png`, `.pdf`) enregistre à la
-  résolution `dpi`. Lancer `Rscript src/viz_tmap.R` produit une démo depuis le cache.
+  résolution `dpi`. Lancer `Rscript src/visualisation.R` produit une démo depuis le cache.
 
 ---
 
@@ -449,7 +460,7 @@ plot_flou_gaussien(hex, "prop_hote", sigma = 3000, resolution = 250,
 4. Évaluer les covariables candidates avec `src/covariate_evaluation.R`.
 5. Déclarer les covariables retenues dans `covariates:` du YAML.
 6. Régler `hex_grid.cellsize`, `min_coverage`, et les découpages temporels.
-7. Lancer `Rscript mod_spa_temp.R` et lire les deux CSV de comparaison.
+7. Lancer `Rscript src/modelisation.R` et lire les deux CSV de comparaison.
 
 ---
 
