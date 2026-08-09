@@ -18,8 +18,14 @@ extraction:
     field: 'MRS_NM_MRC'
     regions: ['La Matanie', 'La Matapédia']
 
-  GRHQ:                          # réseau hydrographique (pour retirer le fleuve)
-    inpath: "data/GRHQ"          # dossier des fichiers GRHQ
+  GRHQ:                          # réseau hydrographique (retirer le fleuve St-Laurent)
+    index: "data/Indexes_téléchargement/Index_GRHQ/Index_GRHQ.shp"  # index des blocs
+    url_field: "FGDB"            # champ contenant l'URL du ZIP (géodatabase)
+    bloc_field: "Bloc"          # identifiant de bloc hydrographique
+    download_dir: "data/downloads/grhq"   # FGDB téléchargées (idempotent)
+    layer: "RH_S"               # couche du réseau hydrographique surfacique
+    toponyme_field: "TOPONYME"  # champ du nom de l'entité
+    toponyme: "Fleuve Saint-Laurent"
     outpath: "data/output/st_laurent.gpkg"
     force_extraction: FALSE
 
