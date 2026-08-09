@@ -2,6 +2,7 @@ library(spdep)
 library(sf)
 library(dplyr)
 
+
 lisa_analysis <- function(data, W, cfg) {
   # Centrage reduction
   for (year in seq(cfg$lisa_analysis$start, cfg$lisa_analysis$end, 1)) {

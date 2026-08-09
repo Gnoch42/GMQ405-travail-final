@@ -2,6 +2,68 @@ library(ggplot2)
 library(ggpubr)
 library(tidyr)
 library(tmap)
+library(gifski)
+
+map.tbe <- function(tbe, study.zone) {
+  tmap_mode("plot")
+  
+  CarteTBE2025 <-
+    tm_shape(study.zone) +
+    tm_polygons(fill = "grey95",
+                col = "black",
+                lwd = 1) +
+    tm_shape(tbe) +
+    tm_polygons(
+      col = NA,
+      fill = "Niveau",
+      fill.scale = tm_scale_categorical(
+        values = c(
+          "Léger" = "#ffffb2",
+          "Modéré" = "#fd8d3c",
+          "Grave" = "#bd0026"
+        )
+      ),
+      fill.legend = tm_legend(
+        title = "Intensité de la défoliation",
+        frame = FALSE,
+        position = c(0.7, 0.2)
+      )
+    ) +
+    tm_layout(frame = FALSE) +
+    tm_scalebar(position = tm_pos_in("right", "bottom"),
+                breaks = c(0, 20),
+                text.size = 0.7) +
+    tm_credits(
+      "Source : MRNF, Données Québec\nAuteur : Jean Yves, Antoine Fortier, Rémy Billette",
+      position = tm_pos_out("center", "bottom")
+    )
+  
+  return(CarteTBE2025)
+}
+
+tbe.animation <- function(tbe, study.zone) {
+  tbe.clip <- st_intersection(tbe, study.zone)
+  
+  CarteAnimee <-
+    tm_shape(study.zone) +
+    tm_polygons(fill = "grey95", col = "black") +
+    tm_shape(tbe.clip) +
+    tm_polygons(
+      col = NA,
+      fill = "Niveau",
+      fill.scale = tm_scale_categorical(
+        values = c("Léger" = "#ffffb2", "Modéré" = "#fd8d3c", "Grave" = "#bd0026")
+      ),
+      fill.legend = tm_legend(title = "Intensité", frame = FALSE)
+    ) +
+    tm_animate(frames = "ANNEE", fps = 1L, play = "loop") +
+    tm_title("Évolution de l'épidémie de TBE") +
+    tm_layout(frame = FALSE)
+  
+  tmap_animation(CarteAnimee, filename = "data/maps/animation_tbe.gif")
+  
+  return(CarteAnimee)
+}
 
 # Aide à la décision pour le choix de matrice spatiale
 moran.I.comparison <- function(df) {
@@ -35,8 +97,9 @@ lisa.map <- function(data, field, year) {
         frame = FALSE
       )
     ) +
-    tm_scalebar(breaks = c(0, 10, 20),
-                position = tm_pos_in('left', 'bottom')) +
+    tm_scalebar(breaks = c(0, 20),
+                text.size = 1.2,
+                position = tm_pos_in("RIGHT", "BOTTOM")) +
     tm_title(year) +
     tm_layout(frame = FALSE)
   

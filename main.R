@@ -1,5 +1,11 @@
 library(yaml)
 library(sf)
+library(geocmeans)
+
+source("src/structuration.R")
+source("src/spattemp_dynamic.R")
+source("src/plotting.R")
+source("src/historic_stats.R")
 
 # Ingestion de la config =======================================================
 cfg <- read_yaml("config.yaml")
@@ -26,37 +32,40 @@ if(!file.exists(cfg$extraction$GRHQ$outpath) | cfg$extraction$GRHQ$force_extract
 # Lecture des données ==========================================================
 tbe <- st_read(cfg$target$source) |>
   st_transform(cfg$project$target_crs)
+tbe$Niveau <- NA
+tbe$Niveau[tbe$Ia == 1] <- "Léger"
+tbe$Niveau[tbe$Ia == 2] <- "Modéré"
+tbe$Niveau[tbe$Ia == 3] <- "Grave"
+tbe$Niveau <- factor(tbe$Niveau, levels = c("Léger", "Modéré", "Grave"), ordered = TRUE)
 
 study.zone <- st_read(cfg$study_zone$source, layer = cfg$study_zone$layer)
 study.zone <- subset(study.zone, st_drop_geometry(study.zone)[,cfg$study_zone$field] %in% cfg$study_zone$regions) |>
   st_transform(cfg$project$target_crs)
 remove <- st_read(cfg$study_zone$remove)
-study.zone <- st_difference(study.zone, remove)
+study.zone.clip <- st_difference(study.zone, remove)
 
 
 # Construiction de la grille hexagonale ========================================
-source("src/structuration.R")
-
 # Avec les niveau en texte
-tbe.grid.chr <- aggregate_tbe_levels_to_hex(study.zone, tbe, cfg)
+tbe.grid.chr <- aggregate_tbe_levels_to_hex(study.zone.clip, tbe, cfg)
 
 # Avec les niveaux en entiers
 tbe.grid.int <- convert_level(tbe.grid.chr)
 
 
-# État actuel de l'épidemie ====================================================
+# Ampleur de l'épidemie ========================================================
+tbe.2025.map <- subset(tbe, ANNEE == 2025) |>
+  st_intersection(study.zone) |>
+  map.tbe(study.zone)
+tmap_save(tbe.2025.map, "data/maps/tbe_2025.png")
+tbe.2025.map
 
-
+tbe.animation <- tbe.animation(tbe, study.zone)
 
 # Statistiques historiques =====================================================
-
-
+historic.stats <- compute.historic.stats(tbe, study.zone)
 
 # Évolution spatiotemporelle ===================================================
-library(geocmeans)
-source("src/spattemp_dynamic.R")
-source("src/plotting.R")
-
 # LISA
 moran.df <- test_W_mat(tbe.grid.int[,"Niveau_2025"])
 moran.I.comparison(moran.df)
@@ -118,7 +127,12 @@ SFCM <- SFCMeans(tbe.zscore, W.Queen,
 calcqualityIndexes(tbe.zscore, SFCM$Belongings, 1.6)
 
 Cartes.SFCM <- mapClusters(tbe.grid.lisa, SFCM$Belongings, undecided = 0.45)
-Cartes.SFCM$ClusterPlot
+Cartes.SFCM$ClusterPlot +
+  tm_scalebar(
+    breaks = c(0, 20),
+    text.size = 1,
+    position = c(0.7, 0.25)
+  )
 tbe.grid.lisa <- cbind(tbe.grid.lisa, SFCM$Belongings)
 names(tbe.grid.lisa)[startsWith(names(tbe.grid.lisa), "X")] <- paste0("groupe_", gsub("\\D", "", names(tbe.grid.lisa)[startsWith(names(tbe.grid.lisa), "X")]))
 
