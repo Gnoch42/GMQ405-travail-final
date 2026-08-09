@@ -42,12 +42,12 @@ study.zone <- st_read(cfg$study_zone$source, layer = cfg$study_zone$layer)
 study.zone <- subset(study.zone, st_drop_geometry(study.zone)[,cfg$study_zone$field] %in% cfg$study_zone$regions) |>
   st_transform(cfg$project$target_crs)
 remove <- st_read(cfg$study_zone$remove)
-study.zone.clip <- st_difference(study.zone, remove)
+study.zone <- st_difference(study.zone, remove)
 
 
 # Construiction de la grille hexagonale ========================================
 # Avec les niveau en texte
-tbe.grid.chr <- aggregate_tbe_levels_to_hex(study.zone.clip, tbe, cfg)
+tbe.grid.chr <- aggregate_tbe_levels_to_hex(study.zone, tbe, cfg)
 
 # Avec les niveaux en entiers
 tbe.grid.int <- convert_level(tbe.grid.chr)
