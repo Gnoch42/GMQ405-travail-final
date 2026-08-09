@@ -375,6 +375,88 @@ map.territory.results <- function(config_path = "config.yaml",
 }
 
 
+#' Figure à 3 panneaux : intensité ESTIMÉE, RÉELLE et ÉCART, pour une année
+#'
+#' Assemble en une seule image (via tmap_arrange) la carte de l'intensité TBE
+#' prédite par un modèle, la carte de l'intensité réellement observée, et la
+#' carte de leur écart (estimé − réel : négatif = sous-estimé, positif =
+#' surestimé). Utile pour juger visuellement la qualité prédictive.
+#'
+#' @param model_name Modèle utilisé pour l'estimation (défaut : Markov spatial).
+#' @param year_t     Année de départ t ; on cartographie la prédiction pour t+1
+#'                   (défaut : l'année de test la plus infestée).
+#' @param export     Chemin de la figure combinée (PNG).
+map.estimation.reel.ecart <- function(config_path = "config.yaml",
+                                      model_name = "Markov spatial", year_t = NULL,
+                                      export = "outputs/cartes/estimation_reel_ecart.png") {
+  cfg <- yaml::read_yaml(config_path)
+  cache <- load.covariate.panel(cfg)
+  if (is.null(cache)) stop("Aucun cache de covariables : lancez src/covariate_build.R")
+
+  panel <- cache$data; hex <- cache$hex
+  cov_names <- names(cache$types); n_states <- length(levels(panel$target))
+  labels <- levels(panel$target)
+  pairs  <- build.transition.pairs(panel, hex, cov_names)
+
+  ev <- cfg$evaluation %||% list(); sp <- cfg$models$group1$temporal_split
+  train_y <- ev$train_years %||% sp$train_years
+  test_y  <- ev$test_years  %||% sp$test_years
+  train <- pairs[pairs$year_t >= train_y[1] & pairs$year_t <= train_y[2], ]
+  test  <- pairs[pairs$year_t >= test_y[1]  & pairs$year_t <= test_y[2], ]
+  if (is.null(year_t)) {
+    infest <- tapply(test$state_t1 > 0, test$year_t, sum)
+    year_t <- as.integer(names(infest)[which.max(infest)])
+  }
+  annee <- year_t + 1
+
+  # Prédiction du modèle choisi.
+  registry <- build.model.registry(cov_names, n_states, hex, cfg)
+  mdl <- Filter(function(m) m$name == model_name, registry)
+  if (length(mdl) == 0) stop("Modèle inconnu : ", model_name)
+  pred <- mdl[[1]]$predict(train, test)
+  if (is.null(pred)) stop("Le modèle ", model_name, " ne prédit pas pour ce découpage.")
+
+  # Assemblage observé / estimé / écart sur la grille.
+  sel <- test$year_t == year_t
+  obs <- setNames(test$state_t1[sel], test$hex_id[sel])[as.character(hex$hex_id)]
+  prd <- setNames(pred[sel],          test$hex_id[sel])[as.character(hex$hex_id)]
+  hex$reel   <- factor(labels[obs + 1], levels = labels, ordered = TRUE)
+  hex$estime <- factor(labels[prd + 1], levels = labels, ordered = TRUE)
+
+  # Écart de classe = variable DISCRÈTE (entiers) : -2, -1, 0, +1, +2. On la
+  # traite en facteur ordonné pour des catégories nettes (pas d'intervalles
+  # fractionnaires). Négatif = sous-estimé, positif = surestimé.
+  ecart_num <- prd - obs
+  lim  <- max(abs(ecart_num), na.rm = TRUE)
+  lv   <- seq(-lim, lim)
+  labs <- ifelse(lv > 0, paste0("+", lv), as.character(lv))
+  hex$ecart <- factor(labs[match(ecart_num, lv)], levels = labs, ordered = TRUE)
+  # Palette divergente discrète : bleu (sous-estimé) -> gris (0) -> rouge (surestimé).
+  pal_ecart <- grDevices::colorRampPalette(
+    rev(RColorBrewer::brewer.pal(11, "RdBu")))(length(lv))
+  base <- theme_tbe() + tm_layout(legend.outside = FALSE)
+
+  carte <- function(var, scale, titre, leg) {
+    tm_shape(hex) +
+      tm_polygons(fill = var, fill.scale = scale, fill.legend = tm_legend(title = leg),
+                  col = "grey60", lwd = 0.2) +
+      tm_title(titre) + base
+  }
+  m_reel   <- carte("reel",   tm_scale_ordinal(values = "brewer.yl_or_rd"),
+                    paste("Réelle —", annee), "Intensité")
+  m_estime <- carte("estime", tm_scale_ordinal(values = "brewer.yl_or_rd"),
+                    paste0("Estimée (", model_name, ") — ", annee), "Intensité")
+  m_ecart  <- carte("ecart",  tm_scale_ordinal(values = pal_ecart),
+                    paste("Différence (est. − réel) —", annee), "Écart de classe")
+
+  combo <- tmap_arrange(m_estime, m_reel, m_ecart, ncol = 3)
+  dir.create(dirname(export), recursive = TRUE, showWarnings = FALSE)
+  suppressMessages(tmap_save(combo, export, width = 14, height = 5, dpi = 150))
+  message("Figure écrite : ", export, " (année ", annee, ", modèle ", model_name, ")")
+  invisible(combo)
+}
+
+
 # POINT D'ENTRÉE : évaluation depuis le cache de covariables ---------------
 
 #' Lancer l'évaluation complète à partir du panel en cache + config
