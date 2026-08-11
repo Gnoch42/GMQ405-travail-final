@@ -70,10 +70,10 @@ tbe.grid.int <- convert_level(tbe.grid.chr)
 dir.create(file.path(out, "ampleur"), recursive = TRUE, showWarnings = FALSE)
 
 # Carte de l'intensité observée (année la plus récente) + animation temporelle.
-tbe.2025.map <- subset(tbe, ANNEE == 2025) |>
+tbe.2014.map <- subset(tbe, ANNEE == 2014) |>
   st_intersection(study.zone) |>
   map.tbe(study.zone)
-tmap_save(tbe.2025.map, file.path(out, "ampleur", "tbe_2025.png"))
+tmap_save(tbe.2014.map, file.path(out, "ampleur", "tbe_2014.png"))
 
 map.tbe.animation(tbe, study.zone, outdir = file.path(out, "ampleur"))
 
