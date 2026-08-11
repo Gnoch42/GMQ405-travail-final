@@ -13,13 +13,13 @@ extraction:
     force_extraction: FALSE
     
   SDA:
-    inpath: "C:/Users/SDA.gpkg"
+    inpath: "data/SDA.gpkg"
     layer: 'mrc_s'
     field: 'MRS_NM_MRC'
     regions: ['La Matanie', 'La Matapédia']
 
   GRHQ:                          # réseau hydrographique (retirer le fleuve St-Laurent)
-    index: "data/Indexes_téléchargement/Index_GRHQ/Index_GRHQ.shp"  # index des blocs
+    index: "data/Indexes_téléchargement/Index_GRHQ/Index_GRHQ.shp"  # index des blocs
     url_field: "FGDB"            # champ contenant l'URL du ZIP (géodatabase)
     bloc_field: "Bloc"          # identifiant de bloc hydrographique
     download_dir: "data/downloads/grhq"   # FGDB téléchargées (idempotent)
@@ -155,7 +155,7 @@ covariates_build:
 
 # --- Données simulées (démo). Mettre use_simulated: FALSE pour les vraies données ---
 simulate:
-  use_simulated: TRUE
+  use_simulated: FALSE
   seed: 42
   n_years: 12
   extent_km: 200
