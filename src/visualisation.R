@@ -331,8 +331,7 @@ group.mean.comparison <- function(data, group.fields, export = NULL) {
   p <- ggplot(data_long, aes(year, valeur, color = Cluster, group = Cluster)) +
     geom_line() + geom_point() +
     labs(x = "Année", y = "Niveau TBE") +
-    scale_color_manual(values = c("red", "blue", "green", "purple", "orange", "yellow")) +
-    theme_tbe_gg()
+    scale_color_brewer(palette = "Set1") + theme_tbe_gg()
   export.graphique(p, export); p
 }
 
